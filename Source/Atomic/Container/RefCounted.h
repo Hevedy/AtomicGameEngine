@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,22 +22,49 @@
 
 #pragma once
 
-#include "HashMap.h"
+#include "Atomic/Atomic.h"
+#include "Vector.h"
+
+// ATOMIC BEGIN
+
+#include "../Container/Str.h"
+#include "../Math/StringHash.h"
+
+// ATOMIC END
 
 namespace Atomic
 {
 
 // ATOMIC BEGIN
 
+/// Instantation type, native code, JS, or C#
+enum InstantiationType
+{
+    INSTANTIATION_NATIVE = 0,
+    INSTANTIATION_JAVASCRIPT = 1,
+    INSTANTIATION_NET = 2
+};
+
 class RefCounted;
-typedef void (*RefCountedDeletedFunction)(RefCounted*);
+
+// function that is called when ref count goes to 1 or 2+, used for script object lifetime
+typedef void (*RefCountChangedFunction)(RefCounted*, int refCount);
+
+// function callback for when a RefCounted is created
+typedef void(*RefCountedCreatedFunction)(RefCounted*);
+
+// function callback for when a RefCounted is deleted
+typedef void(*RefCountedDeletedFunction)(RefCounted*);
+
 typedef const void* ClassID;
 
 /// Macro to be included in RefCounted derived classes for efficient RTTI
-#define REFCOUNTED(typeName) \
+#define ATOMIC_REFCOUNTED(typeName) \
     public: \
         virtual Atomic::ClassID GetClassID() const { return GetClassIDStatic(); } \
-        static Atomic::ClassID GetClassIDStatic() { static const int typeID = 0; return (Atomic::ClassID) &typeID; }
+        static Atomic::ClassID GetClassIDStatic() { static const int typeID = 0; return (Atomic::ClassID) &typeID; } \
+        virtual const String& GetTypeName() const { return GetTypeNameStatic(); } \
+        static const String& GetTypeNameStatic() { static const String _typeName(#typeName); return _typeName; }
 
 // ATOMIC END
 
@@ -86,8 +113,17 @@ public:
     /// Return pointer to the reference count structure.
     RefCount* RefCountPtr() { return refCount_; }
 
-    // ATOMIC BEGIN
+// ATOMIC BEGIN
+
     virtual bool IsObject() const { return false; }
+
+    virtual const String& GetTypeName() const = 0;
+
+    /// Increment reference count. Do not call any lifetime bookkeeping
+    void AddRefSilent();
+
+    /// Decrement reference count, do not call any lifetime bookkeeping, don't delete at refcount == 0
+    void ReleaseRefSilent();
 
     virtual ClassID GetClassID() const  = 0;
     static ClassID GetClassIDStatic() { static const int typeID = 0; return (ClassID) &typeID; }
@@ -96,9 +132,19 @@ public:
     inline void* JSGetHeapPtr() const { return jsHeapPtr_; }
     inline void  JSSetHeapPtr(void* heapptr) { jsHeapPtr_ = heapptr; }
 
-    static void SetRefCountedDeletedFunction(RefCountedDeletedFunction function) { refCountedDeletedFunction_ = function; }
+    inline InstantiationType GetInstantiationType()  const { return instantiationType_; }
+    inline void SetInstantiationType(InstantiationType type) { instantiationType_ = type; }
 
-    // ATOMIC END
+    static void AddRefCountChangedFunction(RefCountChangedFunction function);
+    static void RemoveRefCountChangedFunction(RefCountChangedFunction function);
+
+    static void AddRefCountedCreatedFunction(RefCountedCreatedFunction function);
+    static void RemoveRefCountedCreatedFunction(RefCountedCreatedFunction function);
+
+    static void AddRefCountedDeletedFunction(RefCountedDeletedFunction function);
+    static void RemoveRefCountedDeletedFunction(RefCountedDeletedFunction function);
+
+// ATOMIC END
 
 private:
     /// Prevent copy construction.
@@ -110,10 +156,15 @@ private:
     RefCount* refCount_;
 
     // ATOMIC BEGIN
-    void* jsHeapPtr_;
-    static RefCountedDeletedFunction refCountedDeletedFunction_;
-    // ATOMIC END
 
+    InstantiationType instantiationType_;
+    void* jsHeapPtr_;
+
+    static PODVector<RefCountChangedFunction> refCountChangedFunctions_;
+    static PODVector<RefCountedCreatedFunction> refCountedCreatedFunctions_;
+    static PODVector<RefCountedDeletedFunction> refCountedDeletedFunctions_;
+
+    // ATOMIC END
 
 };
 

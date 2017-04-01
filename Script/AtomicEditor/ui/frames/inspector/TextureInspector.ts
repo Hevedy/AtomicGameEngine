@@ -21,13 +21,13 @@
 //
 
 import ScriptWidget = require("ui/ScriptWidget");
-import UIEvents = require("ui/UIEvents");
 import EditorUI = require("ui/EditorUI");
-import EditorEvents = require("editor/EditorEvents");
+import InspectorWidget = require("./InspectorWidget");
+import InspectorUtils = require("./InspectorUtils");
 
 import TextureSelector = require("./TextureSelector");
 
-class TextureInspector extends ScriptWidget {
+class TextureInspector extends InspectorWidget {
 
     constructor() {
 
@@ -35,6 +35,12 @@ class TextureInspector extends ScriptWidget {
 
         this.fd.id = "Vera";
         this.fd.size = 11;
+
+    }
+
+    handleWidgetEvent(ev: Atomic.UIWidgetEvent): boolean {
+
+        return false;
 
     }
 
@@ -67,15 +73,15 @@ class TextureInspector extends ScriptWidget {
         section.value = 1;
         section.fontDescription = this.fd;
 
-        var attrsVerticalLayout = new Atomic.UILayout(Atomic.UI_AXIS_Y);
+        var attrsVerticalLayout = new Atomic.UILayout(Atomic.UI_AXIS.UI_AXIS_Y);
         attrsVerticalLayout.spacing = 3;
-        attrsVerticalLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION_CENTER;
-        attrsVerticalLayout.layoutSize = Atomic.UI_LAYOUT_SIZE_AVAILABLE;
+        attrsVerticalLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION.UI_LAYOUT_POSITION_CENTER;
+        attrsVerticalLayout.layoutSize = Atomic.UI_LAYOUT_SIZE.UI_LAYOUT_SIZE_AVAILABLE;
 
         section.contentRoot.addChild(attrsVerticalLayout);
 
         var attrLayout = new Atomic.UILayout();
-        attrLayout.layoutDistribution = Atomic.UI_LAYOUT_POSITION_CENTER;
+        attrLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_PREFERRED;
 
         var textureWidget = new Atomic.UITextureWidget();
 
@@ -103,6 +109,7 @@ class TextureInspector extends ScriptWidget {
 
         this.texture = texture;
         this.asset = asset;
+        this.importer = <ToolCore.TextureImporter>asset.importer;
 
         var mlp = new Atomic.UILayoutParams();
         mlp.width = 310;
@@ -110,10 +117,10 @@ class TextureInspector extends ScriptWidget {
         var textureLayout = new Atomic.UILayout();
         textureLayout.spacing = 4;
 
-        textureLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION_GRAVITY;
-        textureLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION_LEFT_TOP;
+        textureLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+        textureLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION.UI_LAYOUT_POSITION_LEFT_TOP;
         textureLayout.layoutParams = mlp;
-        textureLayout.axis = Atomic.UI_AXIS_Y;
+        textureLayout.axis = Atomic.UI_AXIS.UI_AXIS_Y;
 
         var textureSection = new Atomic.UISection();
         textureSection.text = "Texture";
@@ -121,17 +128,17 @@ class TextureInspector extends ScriptWidget {
         textureSection.fontDescription = this.fd;
         textureLayout.addChild(textureSection);
 
-        var attrsVerticalLayout = new Atomic.UILayout(Atomic.UI_AXIS_Y);
+        var attrsVerticalLayout = new Atomic.UILayout(Atomic.UI_AXIS.UI_AXIS_Y);
         attrsVerticalLayout.spacing = 3;
-        attrsVerticalLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION_LEFT_TOP;
-        attrsVerticalLayout.layoutSize = Atomic.UI_LAYOUT_SIZE_PREFERRED;
+        attrsVerticalLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION.UI_LAYOUT_POSITION_LEFT_TOP;
+        attrsVerticalLayout.layoutSize = Atomic.UI_LAYOUT_SIZE.UI_LAYOUT_SIZE_PREFERRED;
 
         // NAME
         var nameLayout = new Atomic.UILayout();
-        nameLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+        nameLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
 
         var name = new Atomic.UITextField();
-        name.textAlign = Atomic.UI_TEXT_ALIGN_LEFT;
+        name.textAlign = Atomic.UI_TEXT_ALIGN.UI_TEXT_ALIGN_LEFT;
         name.skinBg = "InspectorTextAttrName";
 
         name.text = "Name";
@@ -140,7 +147,7 @@ class TextureInspector extends ScriptWidget {
         nameLayout.addChild(name);
 
         var field = new Atomic.UIEditField();
-        field.textAlign = Atomic.UI_TEXT_ALIGN_LEFT;
+        field.textAlign = Atomic.UI_TEXT_ALIGN.UI_TEXT_ALIGN_LEFT;
         field.skinBg = "TBAttrEditorField";
         field.fontDescription = this.fd;
         var lp = new Atomic.UILayoutParams();
@@ -153,6 +160,19 @@ class TextureInspector extends ScriptWidget {
 
         attrsVerticalLayout.addChild(nameLayout);
 
+        var maxSizeLayout = new Atomic.UILayout();
+        maxSizeLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+
+        //COMPRESSION SIZE
+        var maxSize = InspectorUtils.createAttrName("Max Size");
+        this.populateCompressionSizeList();
+
+        maxSizeLayout.addChild(maxSize);
+        maxSizeLayout.addChild(this.compressionSize);
+
+        attrsVerticalLayout.addChild(maxSizeLayout);
+        attrsVerticalLayout.addChild(this.createApplyButton());
+
         textureSection.contentRoot.addChild(attrsVerticalLayout);
 
         textureLayout.addChild(this.createTextureSection());
@@ -161,13 +181,45 @@ class TextureInspector extends ScriptWidget {
 
     }
 
+    onApply() {
+
+        this.importer.setCompressedImageSize(Number(this.compressionSize.text));
+        this.asset.import();
+        this.asset.save();
+
+    }
+
+    populateCompressionSizeList() {
+        this.compressionSize = new Atomic.UISelectDropdown();
+        this.compressionSizeSource = new Atomic.UISelectItemSource();
+
+        for (var i = 0; i < this.compressionSizes.length; i ++) {
+            var size = new Atomic.UISelectItem();
+            size.setString(this.compressionSizes[i].toString());
+            this.compressionSizeSource.addItem(size);
+        }
+
+        this.compressionSize.setSource(this.compressionSizeSource);
+
+        if (this.importer.getCompressedImageSize() != 0) {
+            this.compressionSize.setText(this.importer.getCompressedImageSize().toString());
+        }
+        else {
+            this.compressionSize.setText("NONE");
+        }
+    }
+
     texture: Atomic.Texture2D;
 
     techniqueButton: Atomic.UIButton;
     material: Atomic.Material;
     asset: ToolCore.Asset;
     nameTextField: Atomic.UITextField;
+    compressionSize: Atomic.UISelectDropdown;
+    compressionSizeSource: Atomic.UISelectItemSource;
     fd: Atomic.UIFontDescription = new Atomic.UIFontDescription();
+    importer: ToolCore.TextureImporter;
+    compressionSizes: number[] = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192];
 
 }
 

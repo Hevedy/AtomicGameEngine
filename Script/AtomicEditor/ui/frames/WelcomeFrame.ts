@@ -20,7 +20,6 @@
 // THE SOFTWARE.
 //
 
-import EditorEvents = require("editor/EditorEvents");
 import EditorUI = require("ui/EditorUI");
 import ScriptWidget = require("ui/ScriptWidget");
 import Preferences = require("editor/Preferences");
@@ -35,7 +34,17 @@ class WelcomeFrame extends ScriptWidget {
         this.load("AtomicEditor/editor/ui/welcomeframe.tb.txt");
 
         var recentProjects = <Atomic.UILayout>this.getWidget("recentprojects");
-        this.gravity = Atomic.UI_GRAVITY_ALL;
+
+        this.examplesLayout = <Atomic.UILayout>this.getWidget("examples_layout");
+        this.examplesCSharp = <Atomic.UIButton>this.getWidget("examples_csharp");
+        this.examplesJavaScript = <Atomic.UIButton>this.getWidget("examples_javascript");
+        this.examplesTypeScript = <Atomic.UIButton>this.getWidget("examples_typescript");
+
+        this.examplesCSharp.onClick = () => { this.handleExampleFilter(); };
+        this.examplesJavaScript.onClick = () => { this.handleExampleFilter(); };
+        this.examplesTypeScript.onClick = () => { this.handleExampleFilter(); };
+
+        this.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_ALL;
 
         this.recentList = new Atomic.UIListView();
         this.recentList.rootList.id = "recentList";
@@ -48,9 +57,9 @@ class WelcomeFrame extends ScriptWidget {
 
         this.updateRecentProjects();
 
-        this.subscribeToEvent(EditorEvents.CloseProject, () => {
+        this.subscribeToEvent(Editor.EditorCloseProjectEvent(() => {
             this.updateRecentProjects();
-        });
+        }));
 
         this.initExampleBrowser();
 
@@ -59,7 +68,6 @@ class WelcomeFrame extends ScriptWidget {
     handleClickedExample(example: ProjectTemplates.ProjectTemplateDefinition) {
 
         var ops = EditorUI.getModelOps();
-        var env = ToolCore.toolEnvironment;
         ops.showCreateProject(example);
     }
 
@@ -67,33 +75,49 @@ class WelcomeFrame extends ScriptWidget {
 
         var fileSystem = Atomic.getFileSystem();
 
-        // Verify that at least one of the projects for this example exists, otherwise bounce out
+        let languages = [];
+        if (this.examplesCSharp.value) {
+            languages.push("CSharp");
+        }
+        if (this.examplesJavaScript.value) {
+            languages.push("JavaScript");
+        }
+        if (this.examplesTypeScript.value) {
+            languages.push("TypeScript");
+        }
+
+        // If user doesn't select any languages, show 'em all'
+        if (!languages.length) {
+            languages = ["CSharp", "JavaScript", "TypeScript"];
+        }
+
         let exists = false;
-        example.templates.forEach(template => {
-            if (fileSystem.dirExists(template.folder)) {
+
+        for (var i = 0; i < languages.length; i++) {
+
+            if (example.languages.indexOf(languages[i]) != -1) {
                 exists = true;
+                break;
             }
-        });
+        }
 
         if (!exists) {
             return;
         }
 
-        var exlayout = <Atomic.UILayout>this.getWidget("examples_layout");
-
         if (!this.currentExampleLayout) {
             this.currentExampleLayout = new Atomic.UILayout();
             this.currentExampleLayout.spacing = 8;
-            exlayout.addChild(this.currentExampleLayout);
+            this.examplesLayout.addChild(this.currentExampleLayout);
         }
 
         // 200x150
 
         var exampleLayout = new Atomic.UILayout();
         exampleLayout.skinBg = "StarCondition";
-        exampleLayout.axis = Atomic.UI_AXIS_Y;
-        exampleLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION_GRAVITY;
-        exampleLayout.layoutSize = Atomic.UI_LAYOUT_SIZE_AVAILABLE;
+        exampleLayout.axis = Atomic.UI_AXIS.UI_AXIS_Y;
+        exampleLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+        exampleLayout.layoutSize = Atomic.UI_LAYOUT_SIZE.UI_LAYOUT_SIZE_AVAILABLE;
 
         // IMAGE BUTTON
 
@@ -124,7 +148,7 @@ class WelcomeFrame extends ScriptWidget {
 
         nameField.rect = nameRect;
 
-        nameField.gravity = Atomic.UI_GRAVITY_BOTTOM;
+        nameField.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_BOTTOM;
 
         image.addChild(nameField);
 
@@ -136,7 +160,7 @@ class WelcomeFrame extends ScriptWidget {
 
         button.layoutParams = lp;
 
-        button.gravity = Atomic.UI_GRAVITY_LEFT;
+        button.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_LEFT;
 
         exampleLayout.addChild(button);
 
@@ -148,9 +172,9 @@ class WelcomeFrame extends ScriptWidget {
         descField.readOnly = true;
         descField.wrapping = true;
 
-        var styleDesc = "<color #A9A9A9>" + example.desc + "</color>";
+        descField.skinBg = "AccentColor4";
 
-        descField.text = styleDesc;
+        descField.text = example.desc;
 
         descField.adaptToContentSize = true;
 
@@ -172,7 +196,18 @@ class WelcomeFrame extends ScriptWidget {
 
     }
 
+    handleExampleFilter() {
+
+        this.initExampleBrowser();
+
+    }
+
     initExampleBrowser() {
+
+        this.exampleCount = 0;
+        this.examplesLayout.deleteAllChildren();
+        this.currentExampleLayout = null;
+
         let examples = ProjectTemplates.getExampleProjectTemplateDefinitions();
         for (var i = 0; i < examples.length; i++) {
             this.addExample(examples[i]);
@@ -181,13 +216,13 @@ class WelcomeFrame extends ScriptWidget {
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent) {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_RIGHT_POINTER_UP) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_RIGHT_POINTER_UP) {
             if (ev.target.id == "recentList") {
                 this.openFrameMenu(ev.x, ev.y);
             }
         }
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             var id = ev.target.id;
 
@@ -197,7 +232,7 @@ class WelcomeFrame extends ScriptWidget {
                 var path = utils.openProjectFileDialog();
                 if (path) {
 
-                    this.sendEvent(EditorEvents.LoadProject, { path: path });
+                    this.sendEvent(Editor.RequestProjectLoadEventData({ path: path }));
 
                 }
 
@@ -213,8 +248,11 @@ class WelcomeFrame extends ScriptWidget {
             }
 
             if (id == "recentList") {
+                if (!this.recentList.getSelectedItemID()) {
+                    return;
+                }
                 var path: string = this.recent[this.recentList.getSelectedItemID()];
-                this.sendEvent(EditorEvents.LoadProject, { path: path });
+                this.sendEvent(Editor.RequestProjectLoadEventData({ path: path }));
             }
 
             if (id == "recentProjectsContextMenu") {
@@ -251,7 +289,13 @@ class WelcomeFrame extends ScriptWidget {
 
     // examples
     exampleCount = 0;
+
     currentExampleLayout: Atomic.UILayout;
+    examplesLayout:Atomic.UILayout;
+
+    examplesCSharp: Atomic.UIButton;
+    examplesJavaScript: Atomic.UIButton;
+    examplesTypeScript: Atomic.UIButton;
 
     recent: string[] = [];
     recentList: Atomic.UIListView;

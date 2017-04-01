@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,7 @@
 
 #include "../Precompiled.h"
 
+#include "../IO/FileSystem.h"
 #include "../IO/File.h"
 #include "../IO/Log.h"
 #include "../IO/PackageFile.h"
@@ -32,6 +33,7 @@ namespace Atomic
 PackageFile::PackageFile(Context* context) :
     Object(context),
     totalSize_(0),
+    totalDataSize_(0),
     checksum_(0),
     compressed_(false)
 {
@@ -40,6 +42,7 @@ PackageFile::PackageFile(Context* context) :
 PackageFile::PackageFile(Context* context, const String& fileName, unsigned startOffset) :
     Object(context),
     totalSize_(0),
+    totalDataSize_(0),
     checksum_(0),
     compressed_(false)
 {
@@ -52,14 +55,6 @@ PackageFile::~PackageFile()
 
 bool PackageFile::Open(const String& fileName, unsigned startOffset)
 {
-#ifdef ANDROID
-    if (IS_ASSET(fileName))
-    {
-        LOGERROR("Package files within the apk are not supported on Android");
-        return false;
-    }
-#endif
-
     SharedPtr<File> file(new File(context_, fileName));
     if (!file->IsOpen())
         return false;
@@ -86,7 +81,7 @@ bool PackageFile::Open(const String& fileName, unsigned startOffset)
 
         if (id != "UPAK" && id != "ULZ4")
         {
-            LOGERROR(fileName + " is not a valid package file");
+            ATOMIC_LOGERROR(fileName + " is not a valid package file");
             return false;
         }
     }
@@ -104,10 +99,13 @@ bool PackageFile::Open(const String& fileName, unsigned startOffset)
         String entryName = file->ReadString();
         PackageEntry newEntry;
         newEntry.offset_ = file->ReadUInt() + startOffset;
-        newEntry.size_ = file->ReadUInt();
+        totalDataSize_ += (newEntry.size_ = file->ReadUInt());
         newEntry.checksum_ = file->ReadUInt();
         if (!compressed_ && newEntry.offset_ + newEntry.size_ > totalSize_)
-            LOGERROR("File entry " + entryName + " outside package file");
+        {
+            ATOMIC_LOGERROR("File entry " + entryName + " outside package file");
+            return false;
+        }
         else
             entries_[entryName] = newEntry;
     }
@@ -119,7 +117,7 @@ bool PackageFile::Exists(const String& fileName) const
 {
     bool found = entries_.Find(fileName) != entries_.End();
 
-#ifdef WIN32
+#ifdef _WIN32
     // On Windows perform a fallback case-insensitive search
     if (!found)
     {
@@ -143,7 +141,7 @@ const PackageEntry* PackageFile::GetEntry(const String& fileName) const
     if (i != entries_.End())
         return &i->second_;
 
-#ifdef WIN32
+#ifdef _WIN32
     // On Windows perform a fallback case-insensitive search
     else
     {
@@ -158,4 +156,38 @@ const PackageEntry* PackageFile::GetEntry(const String& fileName) const
     return 0;
 }
 
+// ATOMIC BEGIN
+void PackageFile::Scan(Vector<String>& result, const String& pathName, const String& filter, bool recursive) const
+{
+    result.Clear();
+
+    String sanitizedPath = GetSanitizedPath(pathName);
+    String filterExtension = filter.Substring(filter.FindLast('.'));
+    if (filterExtension.Contains('*'))
+        filterExtension.Clear();
+
+    bool caseSensitive = true;
+#ifdef _WIN32
+    // On Windows ignore case in string comparisons
+    caseSensitive = false;
+#endif
+
+    const StringVector& entryNames = GetEntryNames();
+    for (StringVector::ConstIterator i = entryNames.Begin(); i != entryNames.End(); ++i)
+    {
+        String entryName = GetSanitizedPath(*i);
+        if ((filterExtension.Empty() || entryName.EndsWith(filterExtension, caseSensitive)) &&
+            entryName.StartsWith(sanitizedPath, caseSensitive))
+        {
+            String fileName = entryName.Substring(sanitizedPath.Length());
+            if (fileName.StartsWith("\\") || fileName.StartsWith("/"))
+                fileName = fileName.Substring(1, fileName.Length() - 1);
+            if (!recursive && (fileName.Contains("\\") || fileName.Contains("/")))
+                continue;
+
+            result.Push(fileName);
+        }
+    }
+}
+// ATOMIC END
 }

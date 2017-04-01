@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2014 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2016 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -304,7 +304,12 @@ ALSA_PlayDevice(_THIS)
 
     while ( frames_left > 0 && this->enabled ) {
         /* !!! FIXME: This works, but needs more testing before going live */
-        /* ALSA_snd_pcm_wait(this->hidden->pcm_handle, -1); */
+        /* ATOMIC BEGIN */
+#if defined(__LINUX__)
+        ALSA_snd_pcm_wait(this->hidden->pcm_handle, -1);  /* was commented out, fixes high cpu usage */
+#endif
+        /* ATOMIC END */
+
         status = ALSA_snd_pcm_writei(this->hidden->pcm_handle,
                                      sample_buf, frames_left);
 
@@ -320,7 +325,7 @@ ALSA_PlayDevice(_THIS)
                 /* Hmm, not much we can do - abort */
                 fprintf(stderr, "ALSA write failed (unrecoverable): %s\n",
                         ALSA_snd_strerror(status));
-                this->enabled = 0;
+                SDL_OpenedAudioDeviceDisconnected(this);
                 return;
             }
             continue;
@@ -465,7 +470,7 @@ ALSA_set_buffer_size(_THIS, snd_pcm_hw_params_t *params, int override)
 }
 
 static int
-ALSA_OpenDevice(_THIS, const char *devname, int iscapture)
+ALSA_OpenDevice(_THIS, void *handle, const char *devname, int iscapture)
 {
     int status = 0;
     snd_pcm_t *pcm_handle = NULL;
@@ -644,7 +649,11 @@ ALSA_OpenDevice(_THIS, const char *devname, int iscapture)
     SDL_memset(this->hidden->mixbuf, this->spec.silence, this->hidden->mixlen);
 
     /* Switch to blocking mode for playback */
-    ALSA_snd_pcm_nonblock(pcm_handle, 0);
+    /* ATOMIC BEGIN */
+#ifndef __LINUX__
+    ALSA_snd_pcm_nonblock(pcm_handle, 0);  /* out for linux, in for everything else, fixes high cpu usage */
+#endif
+    /* ATOMIC END */
 
     /* We're ready to rock and roll. :-) */
     return 0;

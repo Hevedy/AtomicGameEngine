@@ -33,6 +33,7 @@ namespace ToolCore
 
 class JSBPackage;
 class JSBClass;
+class JSBFunction;
 
 class JSClassWriter : public JSBClassWriter
 {
@@ -45,7 +46,10 @@ public:
 
 private:
 
+    bool OmitFunction(JSBFunction* function);
+
     void WriteFunctions(String& source);
+
     void GenerateStaticFunctionsSource(String& source, String& packageName);
     void GenerateNonStaticFunctionsSource(String& source, String& packageName);
 

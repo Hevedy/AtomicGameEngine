@@ -26,6 +26,11 @@
 #include "BuildTypes.h"
 #include "../Platform/Platform.h"
 
+namespace Atomic
+{
+    class File;
+}
+
 using namespace Atomic;
 
 namespace ToolCore
@@ -36,7 +41,9 @@ class Project;
 
 class BuildBase : public Object
 {
-    OBJECT(BuildBase);
+    ATOMIC_OBJECT(BuildBase, Object);
+
+friend class AndroidProjectGenerator;
 
 public:
 
@@ -53,6 +60,7 @@ public:
     // add in search order, first added is first searched
     // will warn on name conflicts
     void AddResourceDir(const String& dir);
+    void AddProjectResourceDir(const String& dir);
 
     void BuildLog(const String& message, bool sendEvent = true);
     void BuildWarn(const String& warning, bool sendEvent = true);
@@ -64,17 +72,36 @@ public:
     /// Converts subprocess output event to a buildoutput event
     void HandleSubprocessOutputEvent(StringHash eventType, VariantMap& eventData);
 
+    /// Asset build tag used by the assetbuildconfig.json file to identify the assets to that should be include
+    /// in the build. If no tag is specified, then all resources are included.
+    void SetAssetBuildTag(const String assetBuildTag) { assetBuildTag_ = assetBuildTag; }
+
+    void SetVerbose(bool verbose = true) { verbose_ = verbose; }
+
+    bool GetResourcesOnly() const { return resourcesOnly_; }
+    void SetResourcesOnly(bool resourcesOnly = true) { resourcesOnly_ = resourcesOnly;  }
+
+    bool GetBuildFailed() const { return buildFailed_; }
+    const Vector<String>& GetBuildErrors() const { return buildErrors_; }
+
+    void SetAutoLog(bool autoLog) { autoLog_ = autoLog; }
+
 protected:
 
     bool BuildClean(const String& path);
     bool BuildRemoveDirectory(const String& path);
     bool BuildCreateDirectory(const String& path);
     bool BuildCopyFile(const String& srcFileName, const String& destFileName);
+    bool BuildCopyDir(const String& srcDir, const String& destDir);
+
     virtual bool CheckIncludeResourceFile(const String& resourceDir, const String& fileName);
 
     void GenerateResourcePackage(const String& resourcePackagePath);
 
-    void BuildResourceEntries();
+    void BuildDefaultResourceEntries();
+    void BuildProjectResourceEntries();
+
+    void AddToResourcePackager(const String& filename, const String& resourceDir);
 
     void GetDefaultResourcePaths(Vector<String>& paths);
     String GetSettingsDirectory();
@@ -85,7 +112,19 @@ protected:
     bool containsMDL_;
     bool buildFailed_;
 
+    /// AssetBuildConfiguraton's asset build tag reference
+    String assetBuildTag_;
+
+    /// Pointer to a file used to capture the resources included in the build
+    File *fileIncludedResourcesLog_;
+
+    bool resourcesOnly_;
+    bool verbose_;
+    bool autoLog_;
+
 private:
+    void BuildFilteredProjectResourceEntries();
+    void BuildAllProjectResourceEntries();
 
     PlatformID platformID_;
 
@@ -93,11 +132,12 @@ private:
     Vector<String> buildWarnings_;
     Vector<String> buildErrors_;
 
-    void ScanResourceDirectory(const String& resourceDir);
-
     SharedPtr<Project> project_;
     SharedPtr<ResourcePackager> resourcePackager_;
     Vector<String> resourceDirs_;
+    Vector<String> projectResourceDir_;
+
+    void ReadAssetBuildConfig();
 
 };
 

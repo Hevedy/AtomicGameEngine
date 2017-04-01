@@ -47,7 +47,7 @@ PlayCmd::~PlayCmd()
 
 }
 
-bool PlayCmd::Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg)
+bool PlayCmd::ParseInternal(const Vector<String>& arguments, unsigned startIndex, String& errorMsg)
 {
     String argument = arguments[startIndex].ToLower();
     String value = startIndex + 1 < arguments.Size() ? arguments[startIndex + 1] : String::EMPTY;
@@ -89,7 +89,7 @@ bool PlayCmd::LaunchPlayerProcess(const String& command, const Vector<String>& a
 
 void PlayCmd::Run()
 {
-    LOGINFOF("Playing project");
+    ATOMIC_LOGINFOF("Playing project");
 
     ToolSystem* tsystem = GetSubsystem<ToolSystem>();
     ToolEnvironment* env = GetSubsystem<ToolCore::ToolEnvironment>();

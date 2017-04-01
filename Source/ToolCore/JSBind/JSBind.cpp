@@ -21,6 +21,7 @@
 //
 
 #include <Atomic/Core/ProcessUtils.h>
+#include <Atomic/IO/Log.h>
 #include <Atomic/IO/FileSystem.h>
 
 #include "JSBPackage.h"
@@ -43,11 +44,10 @@ JSBind::~JSBind()
 
 }
 
-bool JSBind::LoadPackage(const String& sourceRootFolder, const String& packageFolder, const String& platform)
+bool JSBind::LoadPackage(const String& sourceRootFolder, const String& packageFolder)
 {
     sourceRootFolder_ = sourceRootFolder;
     packageFolder_ = packageFolder;
-    platform_ = platform;
 
     package_->Load(sourceRootFolder_ + packageFolder_);
 
@@ -57,7 +57,12 @@ bool JSBind::LoadPackage(const String& sourceRootFolder, const String& packageFo
 bool JSBind::GenerateCSharpBindings()
 {
 
-    String modulesFolder = "Artifacts/Build/Source/Generated/" + platform_ + "/CSharp/Packages/";
+    if (!package_->GenerateBindings(JSBPackage::CSHARP))
+        return true;
+
+    ATOMIC_LOGINFOF("Generating C# Bindings");
+
+    String modulesFolder = "Artifacts/Build/Source/Generated/CSharp/Packages/";
     modulesFolder += package_->GetName() + "/";
 
     String nativeOutputFolder = sourceRootFolder_ + "/" + modulesFolder + "Native/";
@@ -90,7 +95,12 @@ bool JSBind::GenerateCSharpBindings()
 
 bool JSBind::GenerateJavaScriptBindings()
 {
-    String modulesFolder = "Artifacts/Build/Source/Generated/" + platform_ + "/Javascript/Packages/";
+    if (!package_->GenerateBindings(JSBPackage::JAVASCRIPT))
+        return true;
+
+    ATOMIC_LOGINFOF("Generating JS Bindings");
+
+    String modulesFolder = "Artifacts/Build/Source/Generated/Javascript/Packages/";
     modulesFolder += package_->GetName() + "/";
 
     String outputFolder = sourceRootFolder_ + "/" + modulesFolder;

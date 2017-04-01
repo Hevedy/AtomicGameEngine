@@ -36,7 +36,7 @@
 
 #include "AtomicTool.h"
 
-DEFINE_APPLICATION_MAIN(AtomicTool::AtomicTool);
+ATOMIC_DEFINE_APPLICATION_MAIN(AtomicTool::AtomicTool);
 
 using namespace ToolCore;
 
@@ -59,38 +59,30 @@ void AtomicTool::Setup()
 {
     const Vector<String>& arguments = GetArguments();
 
-    for (unsigned i = 0; i < arguments.Size(); ++i)
-    {
-        if (arguments[i].Length() > 1)
-        {
-            String argument = arguments[i].ToLower();
-            String value = i + 1 < arguments.Size() ? arguments[i + 1] : String::EMPTY;
-
-            if (argument == "--cli-data-path")
-            {
-                if (!value.Length())
-                    ErrorExit("Unable to parse --cli-data-path");
-
-                cliDataPath_ = AddTrailingSlash(value);
-            }
-            else if (argument == "--activate")
-            {
-                if (!value.Length())
-                    ErrorExit("Unable to parse --activation product key");
-
-                activationKey_ = value;
-            }
-            else if (argument == "--deactivate")
-            {
-                deactivate_ = true;
-            }
-
-        }
-
-    }
+    if (arguments.Contains("-toolbootstrap"))
+        ToolEnvironment::SetBootstrapping();
 
     engineParameters_["Headless"] = true;
     engineParameters_["LogLevel"] = LOG_INFO;
+
+    for (unsigned i = 0; i < arguments.Size(); i++)
+    {
+        if (arguments[i].Length() > 1 && arguments[i][0] == '-')
+        {
+            String argument = arguments[i].Substring(1).ToLower();
+            String value = i + 1 < arguments.Size() ? arguments[i + 1] : String::EMPTY;
+
+            if (argument == "toolbootstrap")
+            {
+                ToolEnvironment::SetBootstrapping();
+            }
+            else if (argument == "loglevel")
+            {
+                engineParameters_["LogLevel"] = Variant(VariantType::VAR_INT, value);
+                i++;
+            }
+        }
+    }
 
     // no default resources, AtomicTool may be run outside of source tree
     engineParameters_["ResourcePaths"] = "";
@@ -146,7 +138,7 @@ void AtomicTool::HandleLicenseActivationError(StringHash eventType, VariantMap& 
 
 void AtomicTool::HandleLicenseActivationSuccess(StringHash eventType, VariantMap& eventData)
 {
-    LOGRAW("\nActivation successful, thank you!\n\n");
+    ATOMIC_LOGRAW("\nActivation successful, thank you!\n\n");
     GetSubsystem<Engine>()->Exit();
 }
 
@@ -154,18 +146,10 @@ void AtomicTool::DoActivation()
 {
     LicenseSystem* licenseSystem = GetSubsystem<LicenseSystem>();
 
-    if (!licenseSystem->ValidateKey(activationKey_))
-    {
-        ErrorExit(ToString("\nProduct key \"%s\" is invalid, keys are in the form ATOMIC-XXXX-XXXX-XXXX-XXXX\n", activationKey_.CString()));
-        return;
-    }
-
     licenseSystem->LicenseAgreementConfirmed();
 
-    SubscribeToEvent(E_LICENSE_ACTIVATIONERROR, HANDLER(AtomicTool, HandleLicenseActivationError));
-    SubscribeToEvent(E_LICENSE_ACTIVATIONSUCCESS, HANDLER(AtomicTool, HandleLicenseActivationSuccess));
-
-    licenseSystem->RequestServerActivation(activationKey_);
+    SubscribeToEvent(E_LICENSE_ACTIVATIONERROR, ATOMIC_HANDLER(AtomicTool, HandleLicenseActivationError));
+    SubscribeToEvent(E_LICENSE_ACTIVATIONSUCCESS, ATOMIC_HANDLER(AtomicTool, HandleLicenseActivationSuccess));
 
 }
 
@@ -177,40 +161,24 @@ void AtomicTool::HandleLicenseDeactivationError(StringHash eventType, VariantMap
 
 void AtomicTool::HandleLicenseDeactivationSuccess(StringHash eventType, VariantMap& eventData)
 {
-    LOGRAW("\nDeactivation successful\n\n");
+    ATOMIC_LOGRAW("\nDeactivation successful\n\n");
     GetSubsystem<Engine>()->Exit();
 }
 
 void AtomicTool::DoDeactivation()
 {
-    LicenseSystem* licenseSystem = GetSubsystem<LicenseSystem>();
-
-    if (!licenseSystem->LoadLicense())
-    {
-        ErrorExit("\nNot activated");
-        return;
-    }
-
-    if (!licenseSystem->Deactivate())
-    {
-        ErrorExit("\nNot activated\n");
-        return;
-    }
-
-    SubscribeToEvent(E_LICENSE_DEACTIVATIONERROR, HANDLER(AtomicTool, HandleLicenseDeactivationError));
-    SubscribeToEvent(E_LICENSE_DEACTIVATIONSUCCESS, HANDLER(AtomicTool, HandleLicenseDeactivationSuccess));
 }
 
 void AtomicTool::Start()
 {
     // Subscribe to events
-    SubscribeToEvent(E_COMMANDERROR, HANDLER(AtomicTool, HandleCommandError));
-    SubscribeToEvent(E_COMMANDFINISHED, HANDLER(AtomicTool, HandleCommandFinished));
+    SubscribeToEvent(E_COMMANDERROR, ATOMIC_HANDLER(AtomicTool, HandleCommandError));
+    SubscribeToEvent(E_COMMANDFINISHED, ATOMIC_HANDLER(AtomicTool, HandleCommandFinished));
 
-    SubscribeToEvent(E_LICENSE_EULAREQUIRED, HANDLER(AtomicTool, HandleLicenseEulaRequired));
-    SubscribeToEvent(E_LICENSE_ACTIVATIONREQUIRED, HANDLER(AtomicTool, HandleLicenseActivationRequired));
-    SubscribeToEvent(E_LICENSE_ERROR, HANDLER(AtomicTool, HandleLicenseError));
-    SubscribeToEvent(E_LICENSE_SUCCESS, HANDLER(AtomicTool, HandleLicenseSuccess));
+    SubscribeToEvent(E_LICENSE_EULAREQUIRED, ATOMIC_HANDLER(AtomicTool, HandleLicenseEulaRequired));
+    SubscribeToEvent(E_LICENSE_ACTIVATIONREQUIRED, ATOMIC_HANDLER(AtomicTool, HandleLicenseActivationRequired));
+    SubscribeToEvent(E_LICENSE_ERROR, ATOMIC_HANDLER(AtomicTool, HandleLicenseError));
+    SubscribeToEvent(E_LICENSE_SUCCESS, ATOMIC_HANDLER(AtomicTool, HandleLicenseSuccess));
 
     const Vector<String>& arguments = GetArguments();
 
@@ -220,24 +188,12 @@ void AtomicTool::Start()
     ToolEnvironment* env = new ToolEnvironment(context_);
     context_->RegisterSubsystem(env);
 
-//#ifdef ATOMIC_DEV_BUILD
-
-    if (!env->InitFromJSON())
+    // Initialize the ToolEnvironment
+    if (!env->Initialize(true))
     {
-        ErrorExit(ToString("Unable to initialize tool environment from %s", env->GetDevConfigFilename().CString()));
+        ErrorExit("Unable to initialize tool environment");
         return;
     }
-
-    if (!cliDataPath_.Length())
-    {
-        cliDataPath_ = env->GetRootSourceDir() + "/Resources/";
-    }
-
-//#endif
-
-    tsystem->SetCLI();
-    tsystem->SetDataPath(cliDataPath_);
-
 
     if (activationKey_.Length())
     {
@@ -267,35 +223,19 @@ void AtomicTool::Start()
 
     if (cmd->RequiresProjectLoad())
     {
-        FileSystem* fileSystem = GetSubsystem<FileSystem>();
-
-        String projectDirectory = fileSystem->GetCurrentDir();
-
-        Vector<String> projectFiles;
-        fileSystem->ScanDir(projectFiles, projectDirectory, "*.atomic", SCAN_FILES, false);
-        if (!projectFiles.Size())
+        if (!cmd->LoadProject())
         {
-            ErrorExit(ToString("No .atomic project file in %s", projectDirectory.CString()));
-            return;
-        }
-        else if (projectFiles.Size() > 1)
-        {
-            ErrorExit(ToString("Multiple .atomic project files found in %s", projectDirectory.CString()));
+            ErrorExit(ToString("Failed to load project: %s", cmd->GetProjectPath().CString()));
             return;
         }
 
-        String projectFile = projectDirectory + "/" + projectFiles[0];
-
-        if (!tsystem->LoadProject(projectFile))
-        {
-            //ErrorExit(ToString("Failed to load project: %s", projectFile.CString()));
-            //return;
-        }
+        String projectPath = cmd->GetProjectPath();
 
         // Set the build path
-        String buildFolder = projectDirectory + "/" + "Build";
+        String buildFolder = projectPath + "/" + "Build";
         buildSystem->SetBuildPath(buildFolder);
 
+        FileSystem* fileSystem = GetSubsystem<FileSystem>();
         if (!fileSystem->DirExists(buildFolder))
         {
             fileSystem->CreateDir(buildFolder);

@@ -36,7 +36,8 @@ namespace Atomic
 
 JSComponentFile::JSComponentFile(Context* context) :
     ScriptComponentFile(context),
-    scriptClass_(false)
+    scriptClass_(false),
+    typescriptClass_(false)
 {
 }
 
@@ -82,9 +83,9 @@ bool JSComponentFile::PushModule()
 
 }
 
-JSComponent* JSComponentFile::CreateJSComponent()
+SharedPtr<JSComponent> JSComponentFile::CreateJSComponent()
 {
-    JSComponent* component = NULL;
+    SharedPtr<JSComponent> component;
 
     if (!scriptClass_)
     {
@@ -98,23 +99,29 @@ JSComponent* JSComponentFile::CreateJSComponent()
 
         PushModule();
 
+        // Check to see if the module exposes a "default" constructor which is used by TS and ES2015
+        duk_get_prop_string(ctx, -1, "default");
+        if (!duk_is_function(ctx, -1))
+        {
+            // We are not a "default" style object, so reset the stack
+            duk_pop(ctx);
+        }
+
         duk_new(ctx, 0);
 
         if (duk_is_object(ctx, -1))
         {
             component = js_to_class_instance<JSComponent>(ctx, -1, 0);
             component->scriptClassInstance_ = true;
-            // store reference below so pop doesn't gc the component
-            component->UpdateReferences();
         }
 
         duk_pop(ctx);
 
     }
 
-    if (!component)
+    if (component.Null())
     {
-        LOGERRORF("Failed to create script class from component file %s", GetName().CString());
+        ATOMIC_LOGERRORF("Failed to create script class from component file %s", GetName().CString());
         component =  new JSComponent(context_);
     }
 
@@ -145,16 +152,26 @@ bool JSComponentFile::InitModule()
     }
     else if (duk_is_object(ctx, -1))
     {
-        duk_get_prop_string(ctx, -1, "component");
-
+        // Look for "default" constructor which is used by TypeScript and ES2015
+        duk_get_prop_string(ctx, -1, "default");
         if (!duk_is_function(ctx, -1))
         {
-            LOGERRORF("Component file export object does not export a key \"component\" function: %s", GetName().CString());
-            duk_set_top(ctx, top);
-            return false;
+            duk_pop(ctx);
+            duk_get_prop_string(ctx, -1, "component");
+
+            if (!duk_is_function(ctx, -1))
+            {
+                ATOMIC_LOGERRORF("Component file export object does not export a key \"component\" function: %s", GetName().CString());
+                duk_set_top(ctx, top);
+                return false;
+            }
+
+            scriptClass_ = false;
+        } else {
+            // this is a TS or ES2015 default class
+            scriptClass_ = true;
         }
 
-        scriptClass_ = false;
     }
 
     duk_set_top(ctx, top);
@@ -165,6 +182,8 @@ bool JSComponentFile::InitModule()
 
 bool JSComponentFile::BeginLoad(Deserializer& source)
 {
+    typescriptClass_ = false;
+
     if (!InitModule())
         return false;
 
@@ -174,7 +193,7 @@ bool JSComponentFile::BeginLoad(Deserializer& source)
     unsigned dataSize = source.GetSize();
     if (!dataSize && !source.GetName().Empty())
     {
-        LOGERROR("Zero sized component file in " + source.GetName());
+        ATOMIC_LOGERROR("Zero sized component file in " + source.GetName());
         return false;
     }
 
@@ -195,6 +214,10 @@ bool JSComponentFile::BeginLoad(Deserializer& source)
     {
         String line = lines[i];
 
+        // TODO: better TS detection
+        if (line.Contains("function __() { this.constructor = d; }"))
+            typescriptClass_ = true;
+
         bool added = false;
 
         if (!eval.Length())
@@ -210,6 +233,11 @@ bool JSComponentFile::BeginLoad(Deserializer& source)
             {
                 added = true;
                 eval = line.Substring(5) + "\n";
+            }
+            else if (line.StartsWith("_this.inspectorFields"))
+            {
+                added = true;
+                eval = line.Substring(6) + "\n";
             }
             else if (line.StartsWith("var inspectorFields"))
             {

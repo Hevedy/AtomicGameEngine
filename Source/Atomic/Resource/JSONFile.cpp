@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,7 @@
 #include "../Core/Context.h"
 #include "../IO/Deserializer.h"
 #include "../IO/Log.h"
+#include "../IO/MemoryBuffer.h"
 #include "../Resource/JSONFile.h"
 #include "../Resource/ResourceCache.h"
 
@@ -117,7 +118,7 @@ bool JSONFile::BeginLoad(Deserializer& source)
     unsigned dataSize = source.GetSize();
     if (!dataSize && !source.GetName().Empty())
     {
-        LOGERROR("Zero sized JSON data in " + source.GetName());
+        ATOMIC_LOGERROR("Zero sized JSON data in " + source.GetName());
         return false;
     }
 
@@ -129,7 +130,7 @@ bool JSONFile::BeginLoad(Deserializer& source)
     rapidjson::Document document;
     if (document.Parse<0>(buffer).HasParseError())
     {
-        LOGERROR("Could not parse JSON data from " + source.GetName());
+        ATOMIC_LOGERROR("Could not parse JSON data from " + source.GetName());
         return false;
     }
 
@@ -138,23 +139,6 @@ bool JSONFile::BeginLoad(Deserializer& source)
     SetMemoryUse(dataSize);
 
     return true;
-}
-
-bool JSONFile::ParseJSON(const String& json, JSONValue& value, bool reportError)
-{
-    rapidjson::Document document;
-    if (document.Parse<0>(json.CString()).HasParseError())
-    {
-        if (reportError)
-            LOGERRORF("Could not parse JSON data from string with error: %s", document.GetParseError());
-
-        return false;
-    }
-
-    ToJSONValue(value, document);
-
-    return true;
-
 }
 
 static void ToRapidjsonValue(rapidjson::Value& rapidjsonValue, const JSONValue& jsonValue, rapidjson::MemoryPoolAllocator<>& allocator)
@@ -201,9 +185,12 @@ static void ToRapidjsonValue(rapidjson::Value& rapidjsonValue, const JSONValue& 
 
             for (unsigned i = 0; i < jsonArray.Size(); ++i)
             {
+// ATOMIC BEGIN
+                // ATOMIC: Set value before adding to array, see note in JSON_OBJECT case below
                 rapidjson::Value value;
-                rapidjsonValue.PushBack(value, allocator);
-                ToRapidjsonValue(rapidjsonValue[i], jsonArray[i], allocator);
+                ToRapidjsonValue(value, jsonArray[i], allocator);
+                rapidjsonValue.PushBack(value, allocator);                
+// ATOMIC END
             }
         }
         break;
@@ -215,10 +202,15 @@ static void ToRapidjsonValue(rapidjson::Value& rapidjsonValue, const JSONValue& 
             rapidjsonValue.SetObject();
             for (JSONObject::ConstIterator i = jsonObject.Begin(); i != jsonObject.End(); ++i)
             {
+// ATOMIC BEGIN
+                // ATOMIC: Set value before adding member, this fixes a rapidjson crash
+                // when trying to immediately find member (VS2015, release build, difficult to reproduce)
+                // TODO: Submit a PR to upstream
                 const char* name = i->first_.CString();
                 rapidjson::Value value;
-                rapidjsonValue.AddMember(name, value, allocator);
-                ToRapidjsonValue(rapidjsonValue[name], i->second_, allocator);
+                ToRapidjsonValue(value, i->second_, allocator);
+                rapidjsonValue.AddMember(rapidjson::Value::StringRefType(name), value, allocator);                
+// ATOMIC END
             }
         }
         break;
@@ -239,12 +231,44 @@ bool JSONFile::Save(Serializer& dest, const String& indendation) const
     ToRapidjsonValue(document, root_, document.GetAllocator());
 
     StringBuffer buffer;
-    PrettyWriter<StringBuffer> writer(buffer, &(document.GetAllocator()));
+// ATOMIC BEGIN
+    PrettyWriter<StringBuffer, rapidjson::UTF8<>, rapidjson::UTF8<>, rapidjson::MemoryPoolAllocator<> > writer(buffer, &(document.GetAllocator()));
+// ATOMIC END
     writer.SetIndent(!indendation.Empty() ? indendation.Front() : '\0', indendation.Length());
 
     document.Accept(writer);
     unsigned size = (unsigned)buffer.GetSize();
     return dest.Write(buffer.GetString(), size) == size;
 }
+
+bool JSONFile::FromString(const String & source)
+{
+    if (source.Empty())
+        return false;
+
+    MemoryBuffer buffer(source.CString(), source.Length());
+    return Load(buffer);
+}
+
+// ATOMIC BEGIN
+
+bool JSONFile::ParseJSON(const String& json, JSONValue& value, bool reportError)
+{
+    rapidjson::Document document;
+    if (document.Parse<0>(json.CString()).HasParseError())
+    {
+        if (reportError)
+            ATOMIC_LOGERRORF("Could not parse JSON data from string with error: %s", document.GetParseError());
+
+        return false;
+    }
+
+    ToJSONValue(value, document);
+
+    return true;
+
+}
+
+// ATOMIC END
 
 }

@@ -46,8 +46,14 @@ String FileUtils::OpenProjectFileDialog()
 {
     nfdchar_t *outPath = NULL;
 
+    String upath;
+
+#ifdef ATOMIC_PLATFORM_LINUX
+    upath = GetSubsystem<FileSystem>()->GetUserDocumentsDir();
+#endif
+
     nfdresult_t result = NFD_OpenDialog( "atomic",
-                                NULL,
+                                upath.Length() ? GetNativePath(upath).CString() : "",
                                 &outPath);
 
     String fullpath;
@@ -84,8 +90,14 @@ String FileUtils::NewProjectFileDialog()
 
     nfdchar_t *outPath = NULL;
 
+    String upath;
+    
+#ifdef ATOMIC_PLATFORM_LINUX
+    upath = GetSubsystem<FileSystem>()->GetUserDocumentsDir();
+#endif
+
     nfdresult_t result = NFD_ChooseDirectory( "Please choose the root folder for your project",
-                                NULL,
+                                upath.Length() ? GetNativePath(upath).CString() : "",
                                 &outPath);
 
 
@@ -108,9 +120,9 @@ String FileUtils::GetBuildPath(const String& defaultPath)
     String buildPath;
 
     nfdchar_t *outPath = NULL;
-
+    
     nfdresult_t result = NFD_ChooseDirectory( "Please choose the build folder",
-                                defaultPath.Length() ? defaultPath.CString() : NULL,
+                                defaultPath.Length() ? GetNativePath(defaultPath).CString() : "",
                                 &outPath);
 
     if (outPath && result == NFD_OKAY)
@@ -127,30 +139,6 @@ String FileUtils::GetBuildPath(const String& defaultPath)
 
 }
 
-String FileUtils::GetAndroidSDKPath(const String& defaultPath)
-{
-    String sdkPath;
-
-    nfdchar_t *outPath = NULL;
-
-    nfdresult_t result = NFD_ChooseDirectory( "Please choose the root folder of your Android SDK",
-                                defaultPath.Length() ? defaultPath.CString() : NULL,
-                                &outPath);
-
-    if (outPath && result == NFD_OKAY)
-    {
-        sdkPath = outPath;
-    }
-
-    if (outPath)
-        free(outPath);
-
-    GetSubsystem<Graphics>()->RaiseWindow();
-
-    return GetInternalPath(sdkPath);
-
-}
-
 String FileUtils::GetAntPath(const String& defaultPath)
 {
     String antPath;
@@ -164,8 +152,8 @@ String FileUtils::GetAntPath(const String& defaultPath)
 #endif
 
     nfdresult_t result = NFD_ChooseDirectory(msg.CString(),
-        defaultPath.Length() ? defaultPath.CString() : NULL,
-        &outPath);
+                        defaultPath.Length() ? GetNativePath(defaultPath).CString() : "",
+                        &outPath);
 
     if (outPath && result == NFD_OKAY)
     {
@@ -180,36 +168,12 @@ String FileUtils::GetAntPath(const String& defaultPath)
     return GetInternalPath(antPath);
 }
 
-String FileUtils::GetJDKRootPath(const String& defaultPath)
-{
-    String jdkPath;
-
-    nfdchar_t *outPath = NULL;
-
-    nfdresult_t result = NFD_ChooseDirectory("Please choose the root folder of your JDK",
-        defaultPath.Length() ? defaultPath.CString() : NULL,
-        &outPath);
-
-    if (outPath && result == NFD_OKAY)
-    {
-        jdkPath = outPath;
-    }
-
-    if (outPath)
-        free(outPath);
-
-    GetSubsystem<Graphics>()->RaiseWindow();
-
-    return GetInternalPath(jdkPath);
-
-}
-
 String FileUtils::GetMobileProvisionPath()
 {
     nfdchar_t *outPath = NULL;
 
     nfdresult_t result = NFD_OpenDialog( "mobileprovision",
-                                NULL,
+                                "",
                                 &outPath);
 
     String fullpath;
@@ -239,5 +203,48 @@ void FileUtils::RevealInFinder(const String& fullpath)
         fs->SystemOpen(GetPath(fullpath));
 }
 
+String FileUtils::FindPath(const String& title, const String& defaultPath)
+{
+    String resultPath;
+    nfdchar_t *outPath = NULL;
+
+    nfdresult_t result = NFD_ChooseDirectory(title.CString(),
+                       defaultPath.Length() ? GetNativePath(defaultPath).CString() : "",
+                       &outPath);
+
+    if (outPath && result == NFD_OKAY)
+    {
+        resultPath = outPath;
+    }
+
+    if (outPath)
+        free(outPath);
+
+    GetSubsystem<Graphics>()->RaiseWindow();
+
+    return GetInternalPath(resultPath);
+}
+
+String FileUtils::FindFile (const String& filterlist, const String& defaultPath)
+{
+    String fullpath;
+    nfdchar_t *outPath = NULL;
+
+    nfdresult_t result = NFD_OpenDialog( filterlist.CString(),
+        defaultPath.Length() ? GetNativePath(defaultPath).CString() : "",
+        &outPath);
+
+    if (outPath && result == NFD_OKAY)
+    {
+        fullpath = outPath;
+    }
+
+    GetSubsystem<Graphics>()->RaiseWindow();
+
+    if (outPath)
+        free(outPath);
+
+    return fullpath;
+}
 
 }

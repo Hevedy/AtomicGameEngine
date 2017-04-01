@@ -1,10 +1,14 @@
 {
 	"name" : "IO",
 	"sources" : ["Source/Atomic/IO"],
-	"classes" : ["Log", "File", "FileSystem", "FileWatcher", "BufferQueue"],
+	"classes" : ["Log", "File", "FileSystem", "FileWatcher", "BufferQueue", "PackageFile"],
+	"interfaces" : ["Serializer", "Deserializer"],
 	"overloads" : {
 		"File" : {
 			"File" : ["Context", "String", "FileMode"]
+		},
+		"PackageFile" : {
+			"PackageFile" : ["Context", "String", "unsigned"]
 		}
 	},
 	"typescript_decl" : {
@@ -16,7 +20,7 @@
 			"scanDir(pathName:string, filter:string, flags:number, recursive:boolean):Array<string>;"
 		]
 	},
-	
+
 	"haxe_decl" : {
 		"File" : [
 			"function readText():String;",

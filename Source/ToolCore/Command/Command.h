@@ -29,29 +29,28 @@ using namespace Atomic;
 namespace ToolCore
 {
 
-EVENT(E_COMMANDERROR, CommandError)
+ATOMIC_EVENT(E_COMMANDERROR, CommandError)
 {
-    PARAM(P_MESSAGE, Message);      // string
+    ATOMIC_PARAM(P_MESSAGE, Message);      // string
 }
 
 
-EVENT(E_COMMANDFINISHED, CommandFinished)
+ATOMIC_EVENT(E_COMMANDFINISHED, CommandFinished)
 {
 
 }
 
 class Command : public Object
 {
-    OBJECT(Command);
+    ATOMIC_OBJECT(Command, Object)
 
 public:
 
     Command(Context* context);
     virtual ~Command();
 
-    bool Parse(const String& command);
-
-    virtual bool Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg) = 0;
+    /// Parse a command from given arguments and startIndex, return false on failure with errorMsg set
+    bool Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg);
 
     virtual void Run() = 0;
 
@@ -63,11 +62,23 @@ public:
 
     virtual bool RequiresProjectLoad() { return true; }
 
+    /// Loads project into ToolSystem returning true on success
+    bool LoadProject();
+
+    /// Returns the project path specified by the --project common argument
+    virtual const String& GetProjectPath() const { return projectPath_; }
+
     virtual bool RequiresLicenseValidation() { return false; }
 
-private:
+protected:
 
-    float timeOut_;
+    virtual bool ParseInternal(const Vector<String>& arguments, unsigned startIndex, String& errorMsg) = 0;
+
+    void ParseCommonArguments(const Vector<String>& arguments, String &errorMsg);
+
+    float timeOut_;    
+
+    String projectPath_;
 
 };
 

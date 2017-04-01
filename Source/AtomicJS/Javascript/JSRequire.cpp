@@ -124,8 +124,8 @@ namespace Atomic
         SplitPath(moduleID, pathName, fileName, extension);
         String path = moduleID;
 
-        // Do we really want this?  It is nice to not have to specify the Atomic path
-        if (fileName.StartsWith("Atomic"))
+        // It is nice to not have to specify the Atomic path, but verify that the module exists first since it could be user provided
+        if (fileName.StartsWith("Atomic") && cache->Exists("AtomicModules/" + path + ".js"))
         {
             path = "AtomicModules/" + path + ".js";
         }
@@ -150,6 +150,16 @@ namespace Atomic
 
         if (cache->Exists(path))
         {
+            // We're a module w/o an associated filename, so we need
+            // to provide the fully qualified filename path so the debugger
+            // can resolve to a file correctly
+            if (duk_is_object(ctx, 3) &&
+                    !duk_has_prop_string(ctx, 3, "filename"))
+            {
+                duk_push_string(ctx, path.CString());
+                duk_put_prop_string(ctx, 3, "filename");
+            }
+
             SharedPtr<File> jsfile(cache->GetFile(path, false));
             vm->SetLastModuleSearchFile(jsfile->GetFullPath());
             String source;

@@ -44,14 +44,14 @@ extern const char* LOGIC_CATEGORY;
 
 class JSComponentFactory : public ObjectFactory
 {
+    ATOMIC_REFCOUNTED(JSComponentFactory)
+
 public:
     /// Construct.
     JSComponentFactory(Context* context) :
         ObjectFactory(context)
     {
-        type_ = JSComponent::GetTypeStatic();
-        baseType_ = JSComponent::GetBaseTypeStatic();
-        typeName_ = JSComponent::GetTypeNameStatic();
+        typeInfo_ = JSComponent::GetTypeInfoStatic();
     }
 
     /// Create an object of the specific type.
@@ -100,7 +100,7 @@ public:
                     ptr = componentFile->CreateJSComponent();
                 else
                 {
-                    LOGERRORF("Unable to load component file %s", split[1].CString());
+                    ATOMIC_LOGERRORF("Unable to load component file %s", split[1].CString());
                 }
             }
 
@@ -125,8 +125,7 @@ JSComponent::JSComponent(Context* context) :
     started_(false),
     destroyed_(false),
     scriptClassInstance_(false),
-    delayedStartCalled_(false),
-    loading_(false)
+    delayedStartCalled_(false)
 {
     vm_ = JSVM::GetJSVM(NULL);
 }
@@ -138,9 +137,9 @@ JSComponent::~JSComponent()
 
 void JSComponent::RegisterObject(Context* context)
 {
-    context->RegisterFactory(new JSComponentFactory(context), LOGIC_CATEGORY);
-    MIXED_ACCESSOR_ATTRIBUTE("ComponentFile", GetComponentFileAttr, SetComponentFileAttr, ResourceRef, ResourceRef(JSComponentFile::GetTypeStatic()), AM_DEFAULT);
-    COPY_BASE_ATTRIBUTES(ScriptComponent);
+    context->RegisterFactory( new JSComponentFactory(context), LOGIC_CATEGORY);
+    ATOMIC_MIXED_ACCESSOR_ATTRIBUTE("ComponentFile", GetComponentFileAttr, SetComponentFileAttr, ResourceRef, ResourceRef(JSComponentFile::GetTypeStatic()), AM_DEFAULT);
+    ATOMIC_COPY_BASE_ATTRIBUTES(ScriptComponent);
 }
 
 void JSComponent::OnSetEnabled()
@@ -157,48 +156,8 @@ void JSComponent::SetUpdateEventMask(unsigned char mask)
     }
 }
 
-void JSComponent::UpdateReferences(bool remove)
-{
-    if (context_->GetEditorContext())
-        return;
-
-    duk_context* ctx = vm_->GetJSContext();
-
-    int top = duk_get_top(ctx);
-
-    duk_push_global_stash(ctx);
-    duk_get_prop_index(ctx, -1, JS_GLOBALSTASH_INDEX_NODE_REGISTRY);
-
-    // can't use instance as key, as this coerces to [Object] for
-    // string property, pointer will be string representation of
-    // address, so, unique key
-
-    if (node_)
-    {
-        duk_push_pointer(ctx, (void*) node_);
-        if (remove)
-            duk_push_undefined(ctx);
-        else
-            js_push_class_object_instance(ctx, node_);
-
-        duk_put_prop(ctx, -3);
-    }
-
-    duk_push_pointer(ctx, (void*) this);
-    if (remove)
-        duk_push_undefined(ctx);
-    else
-        js_push_class_object_instance(ctx, this);
-
-    duk_put_prop(ctx, -3);
-
-    duk_pop_2(ctx);
-
-    assert(duk_get_top(ctx) == top);
-}
-
-void JSComponent::ApplyAttributes()
-{
+bool JSComponent::IsInstanceInitialized() {
+    return instanceInitialized_;
 }
 
 void JSComponent::InitInstance(bool hasArgs, int argIdx)
@@ -209,9 +168,6 @@ void JSComponent::InitInstance(bool hasArgs, int argIdx)
     duk_context* ctx = vm_->GetJSContext();
 
     duk_idx_t top = duk_get_top(ctx);
-
-    // store, so pop doesn't clear
-    UpdateReferences();
 
     // apply fields
 
@@ -229,7 +185,7 @@ void JSComponent::InitInstance(bool hasArgs, int argIdx)
             {
                 Variant& v = fieldValues_[itr->first_];
 
-                if (v.GetType() == itr->second_)
+                if (v.GetType() == itr->second_.variantType_)
                 {
                     js_push_variant(ctx, v);
                     duk_put_prop_string(ctx, -2, itr->first_.CString());
@@ -280,12 +236,21 @@ void JSComponent::InitInstance(bool hasArgs, int argIdx)
             return;
         }
 
-        duk_get_prop_string(ctx, -1, "component");
+        // Check for "default" constructor which is used by TypeScript and ES2015
+        duk_get_prop_string(ctx, -1, "default");
 
         if (!duk_is_function(ctx, -1))
         {
-            duk_set_top(ctx, top);
-            return;
+            duk_pop(ctx);
+
+            // If "default" doesn't exist, look for component
+            duk_get_prop_string(ctx, -1, "component");
+
+            if (!duk_is_function(ctx, -1))
+            {
+                duk_set_top(ctx, top);
+                return;
+            }
         }
 
         // call with self
@@ -398,12 +363,9 @@ void JSComponent::OnNodeSet(Node* node)
 {
     if (node)
     {
-        UpdateReferences();
     }
     else
     {
-        // We are being detached from a node: execute user-defined stop function and prepare for destruction
-        UpdateReferences(true);
         Stop();
     }
 }
@@ -435,7 +397,7 @@ void JSComponent::UpdateEventSubscription()
     bool needUpdate = enabled && ((updateEventMask_ & USE_UPDATE) || !delayedStartCalled_);
     if (needUpdate && !(currentEventMask_ & USE_UPDATE))
     {
-        SubscribeToEvent(scene, E_SCENEUPDATE, HANDLER(JSComponent, HandleSceneUpdate));
+        SubscribeToEvent(scene, E_SCENEUPDATE, ATOMIC_HANDLER(JSComponent, HandleSceneUpdate));
         currentEventMask_ |= USE_UPDATE;
     }
     else if (!needUpdate && (currentEventMask_ & USE_UPDATE))
@@ -447,10 +409,10 @@ void JSComponent::UpdateEventSubscription()
     bool needPostUpdate = enabled && (updateEventMask_ & USE_POSTUPDATE);
     if (needPostUpdate && !(currentEventMask_ & USE_POSTUPDATE))
     {
-        SubscribeToEvent(scene, E_SCENEPOSTUPDATE, HANDLER(JSComponent, HandleScenePostUpdate));
+        SubscribeToEvent(scene, E_SCENEPOSTUPDATE, ATOMIC_HANDLER(JSComponent, HandleScenePostUpdate));
         currentEventMask_ |= USE_POSTUPDATE;
     }
-    else if (!needUpdate && (currentEventMask_ & USE_POSTUPDATE))
+    else if (!needPostUpdate && (currentEventMask_ & USE_POSTUPDATE))
     {
         UnsubscribeFromEvent(scene, E_SCENEPOSTUPDATE);
         currentEventMask_ &= ~USE_POSTUPDATE;
@@ -464,7 +426,7 @@ void JSComponent::UpdateEventSubscription()
     bool needFixedUpdate = enabled && (updateEventMask_ & USE_FIXEDUPDATE);
     if (needFixedUpdate && !(currentEventMask_ & USE_FIXEDUPDATE))
     {
-        SubscribeToEvent(world, E_PHYSICSPRESTEP, HANDLER(JSComponent, HandlePhysicsPreStep));
+        SubscribeToEvent(world, E_PHYSICSPRESTEP, ATOMIC_HANDLER(JSComponent, HandlePhysicsPreStep));
         currentEventMask_ |= USE_FIXEDUPDATE;
     }
     else if (!needFixedUpdate && (currentEventMask_ & USE_FIXEDUPDATE))
@@ -476,7 +438,7 @@ void JSComponent::UpdateEventSubscription()
     bool needFixedPostUpdate = enabled && (updateEventMask_ & USE_FIXEDPOSTUPDATE);
     if (needFixedPostUpdate && !(currentEventMask_ & USE_FIXEDPOSTUPDATE))
     {
-        SubscribeToEvent(world, E_PHYSICSPOSTSTEP, HANDLER(JSComponent, HandlePhysicsPostStep));
+        SubscribeToEvent(world, E_PHYSICSPOSTSTEP, ATOMIC_HANDLER(JSComponent, HandlePhysicsPostStep));
         currentEventMask_ |= USE_FIXEDPOSTUPDATE;
     }
     else if (!needFixedPostUpdate && (currentEventMask_ & USE_FIXEDPOSTUPDATE))
@@ -537,24 +499,6 @@ void JSComponent::HandlePhysicsPostStep(StringHash eventType, VariantMap& eventD
     FixedPostUpdate(eventData[P_TIMESTEP].GetFloat());
 }
 #endif
-
-bool JSComponent::Load(Deserializer& source, bool setInstanceDefault)
-{
-    loading_ = true;
-    bool success = Component::Load(source, setInstanceDefault);
-    loading_ = false;
-
-    return success;
-}
-
-bool JSComponent::LoadXML(const XMLElement& source, bool setInstanceDefault)
-{
-    loading_ = true;
-    bool success = Component::LoadXML(source, setInstanceDefault);
-    loading_ = false;
-
-    return success;
-}
 
 bool JSComponent::MatchScriptName(const String& path)
 {

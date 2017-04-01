@@ -41,6 +41,9 @@ class ListViewItemWidget;
 
 class ListViewItemWidget : public TBLayout
 {
+    // For safe typecasting
+    TBOBJECT_SUBCLASS(ListViewItemWidget, TBLayout)
+
 public:
     ListViewItemWidget(ListViewItem *item, ListViewItemSource *source, TBSelectItemViewer *sourceviewer, int index);
     virtual bool OnEvent(const TBWidgetEvent &ev);
@@ -340,6 +343,18 @@ bool ListViewItemWidget::OnEvent(const TBWidgetEvent &ev)
     if (ev.type == EVENT_TYPE_CLICK &&  ev.target == expandBox_ && ev.target->GetID() == item_->id)
     {
         item_->SetExpanded(!item_->GetExpanded());
+
+        // If we're expanding, and CTRL is help down, expand all children
+        if (item_->GetExpanded() && ev.modifierkeys & TB_CTRL)
+        {
+            PODVector<ListViewItem*> children;
+            item_->GetChildren(children, true);
+
+            for (unsigned i = 0; i < children.Size(); i++)
+            {
+                children[i]->SetExpanded(true);
+            }
+        }
 
         source_->uiListView_->UpdateItemVisibility();
 

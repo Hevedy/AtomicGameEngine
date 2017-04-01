@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 //
 
-import editor from "./editor";
+import * as internalEditor from "./editor";
 import serviceLocator from "../clientExtensions/ServiceLocator";
 import HostInterop from "../interop";
 import ClientExtensionEventNames from "../clientExtensions/ClientExtensionEventNames";
@@ -32,17 +32,44 @@ import ClientExtensionEventNames from "../clientExtensions/ClientExtensionEventN
  */
 export function configure(fileExt: string, filename: string) {
 
-    // set a default theme
-    editor.setTheme("ace/theme/monokai");
+    let monacoEditor = <monaco.editor.IStandaloneCodeEditor>internalEditor.getInternalEditor();
 
-    // set a default mode
-    editor.session.setMode("ace/mode/javascript");
+    updateEditorPrefs();
 
     // give the language extensions the opportunity to configure the editor based upon the file type
     serviceLocator.sendEvent(ClientExtensionEventNames.ConfigureEditorEvent, {
         fileExt: fileExt,
         filename: filename,
-        editor: editor
+        editor: monacoEditor
+    });
+
+    // Override CMD/CTRL+I since that is going to be used for Format Code and in the editor it is assigned to something else
+    const noOpCommand: monaco.editor.ICommandHandler = () => { };
+    monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_I, noOpCommand, null);
+
+    updateEditorPrefs();
+}
+
+/**
+ * Update the editor prefs
+ */
+export function updateEditorPrefs() {
+    // converter to handle new version of the renderWhitespace setting
+    const renderWhitespaceAdapter = (setting): "none" | "boundary" | "all" => {
+        switch (setting.toLowerCase()) {
+            case "true": return "all";
+            case "false": return "none";
+            default: return setting;
+        }
+    };
+
+    let monacoEditor = <monaco.editor.IStandaloneCodeEditor>internalEditor.getInternalEditor();
+    monacoEditor.updateOptions({
+        theme: serviceLocator.clientServices.getApplicationPreference("codeEditor", "theme", "vs-dark"),
+        renderWhitespace: renderWhitespaceAdapter(serviceLocator.clientServices.getApplicationPreference("codeEditor", "showInvisibles", "none")),
+        mouseWheelScrollSensitivity: 2,
+        fontSize: serviceLocator.clientServices.getApplicationPreference("codeEditor", "fontSize", 12),
+        fontFamily: serviceLocator.clientServices.getApplicationPreference("codeEditor", "fontFamily", "")
     });
 }
 
@@ -50,8 +77,8 @@ export function configure(fileExt: string, filename: string) {
  * Returns the text in the editor instance
  * @return {string}
  */
-export function getSourceText() : string {
-    return editor.session.getValue();
+export function getSourceText(): string {
+    return internalEditor.getInternalEditor().getModel().getValue();
 }
 
 /**
@@ -61,20 +88,26 @@ export function getSourceText() : string {
  * @param  {string} fileExt
  */
 export function loadCodeIntoEditor(code: string, filename: string, fileExt: string) {
-    editor.session.setValue(code);
-    editor.gotoLine(0);
 
-    editor.getSession().on("change", function(e) {
-        HostInterop.getInstance().notifyEditorChange();
+    let monacoEditor = internalEditor.getInternalEditor();
+    let model = monaco.editor.createModel(code, null, monaco.Uri.parse(filename));
+
+    model.updateOptions({
+        insertSpaces: serviceLocator.clientServices.getApplicationPreference("codeEditor", "useSoftTabs", true),
+        tabSize: serviceLocator.clientServices.getApplicationPreference("codeEditor", "tabSize", 4)
     });
 
+    monacoEditor.setModel(model);
     serviceLocator.sendEvent(ClientExtensionEventNames.CodeLoadedEvent, {
         code: code,
         filename: filename,
         fileExt: fileExt,
-        editor: editor
+        editor: monacoEditor
     });
 
+    monacoEditor.onDidChangeModelContent((listener) => {
+        HostInterop.getInstance().notifyEditorChange();
+    });
 }
 
 /**
@@ -83,7 +116,7 @@ export function loadCodeIntoEditor(code: string, filename: string, fileExt: stri
  * @param  {string} newPath
  */
 export function resourceRenamed(path: string, newPath: string) {
-    let data:Editor.EditorEvents.RenameResourceEvent = {
+    let data: Editor.ClientExtensions.RenameResourceEvent = {
         path: path,
         newPath: newPath
     };
@@ -95,7 +128,7 @@ export function resourceRenamed(path: string, newPath: string) {
  * @param  {string} path
  */
 export function resourceDeleted(path: string) {
-    let data:Editor.EditorEvents.DeleteResourceEvent = {
+    let data: Editor.ClientExtensions.DeleteResourceEvent = {
         path: path
     };
     serviceLocator.sendEvent(ClientExtensionEventNames.ResourceDeletedEvent, data);
@@ -108,20 +141,81 @@ export function resourceDeleted(path: string) {
  * @param {string} contents
  */
 export function codeSaved(path: string, fileExt: string, contents: string) {
-    let data:Editor.EditorEvents.CodeSavedEvent = {
+    let data: Editor.ClientExtensions.CodeSavedEvent = {
         filename: path,
         fileExt: fileExt,
-        editor: editor,
+        editor: internalEditor.getInternalEditor(),
         code: contents
     };
     serviceLocator.sendEvent(ClientExtensionEventNames.CodeSavedEvent, data);
 }
 
 /**
- * Called when new preferences are available (or initially with current prefs)
- * @param  {any} prefs
+ * Called when the editor has finished it's initial load
  */
-export function loadPreferences(prefs: any) {
-    serviceLocator.clientServices.setPreferences(prefs);
-    serviceLocator.sendEvent(ClientExtensionEventNames.PreferencesChangedEvent, null);
+export function editorLoaded() {
+    // let's grab the prefs and seed the service locator
+    serviceLocator.clientServices.setPreferences(JSON.parse(window.HOST_Preferences.ProjectPreferences), JSON.parse(window.HOST_Preferences.ApplicationPreferences));
+}
+
+/**
+ * Called when new preferences are available (or initially with current prefs)
+ */
+export function preferencesChanged(prefs: Editor.ClientExtensions.PreferencesChangedEventData) {
+    serviceLocator.clientServices.setPreferences(prefs.projectPreferences, prefs.applicationPreferences);
+    updateEditorPrefs();
+
+    serviceLocator.sendEvent(ClientExtensionEventNames.PreferencesChangedEvent, prefs);
+}
+
+export function setEditor(editor: any) {
+    internalEditor.setInternalEditor(editor);
+}
+
+/**
+ * Called when a resource is getting deleted
+ * @param  {string} path
+ */
+export function formatCode() {
+    serviceLocator.sendEvent(ClientExtensionEventNames.FormatCodeEvent, null);
+}
+
+/**
+ * Called when the editor should respond to a host shortcut command
+ */
+export function invokeShortcut(shortcut: Editor.EditorShortcutType) {
+
+    const ed = internalEditor.getInternalEditor();
+    ed.focus();
+
+    switch (shortcut) {
+        case "cut":
+        case "copy":
+        case "paste":
+            window.document.execCommand(shortcut);
+            break;
+
+        case "selectall":
+            ed.setSelection(ed.getModel().getFullModelRange());
+            break;
+    }
+}
+
+/**
+ * Selects the provided line number
+ */
+export function gotoLineNumber(lineNumber:number) {
+    const ed = internalEditor.getInternalEditor();
+    ed.revealLineInCenterIfOutsideViewport(lineNumber);
+    ed.setPosition(new monaco.Position(lineNumber, 0));
+}
+
+/**
+ * Selects the provided position
+ */
+export function gotoTokenPos(tokenPos:number) {
+    const ed = internalEditor.getInternalEditor();
+    const pos = ed.getModel().getPositionAt(tokenPos);
+    ed.revealPositionInCenterIfOutsideViewport(pos);
+    ed.setPosition(pos);
 }

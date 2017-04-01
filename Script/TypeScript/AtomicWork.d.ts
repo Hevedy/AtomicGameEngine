@@ -2,7 +2,6 @@
 /// <reference path="ToolCore.d.ts" />
 /// <reference path="Editor.d.ts" />
 /// <reference path="AtomicPlayer.d.ts" />
-/// <reference path="AtomicNET.d.ts" />
 
 declare module Atomic {
 
@@ -27,6 +26,48 @@ declare module Atomic {
 
     // end subsystems
 
+    /** Base for all event types */
+    type EventType = string;
+
+    /** Base for all event callback data */
+    type EventData = Object;
+
+    /** Base interface for events, contains eventType string and callback */
+    interface EventMetaData {
+        /**@internal*/
+        _eventType?: string;
+        /**@internal*/
+        _callback?: (...params) => any;
+    }
+
+    /** Base interface for event data sent to event handlers */
+    interface EventCallbackMetaData {
+        /**@internal*/
+        _eventType?: string;
+        /**@internal*/
+        _callbackData?: any;
+    }
+
+    interface NativeEvent extends EventMetaData { }
+
+    interface ScriptEvent extends EventMetaData { }
+
+    // typed callback generic
+    type EventCallback<T extends EventMetaData> = (data: T) => void;
+
+    /**
+     * Utility function to wrap up an event callback to pass to subscribeToEvent
+     * @param eventType The type of event to wrap
+     * @param callback A callback to call when the event is fired
+     */
+    export function ScriptEvent<T extends Atomic.EventMetaData>(eventType: string, callback: Atomic.EventCallback<T>): Atomic.EventMetaData;
+
+    /**
+     * Utility function to wrap up event data to pass to sendEvent
+     * @param eventType The type of event to wrap
+     * @param callbackData The data to pass to the event subscriber
+     */
+    export function ScriptEventData<T extends Atomic.EventData>(eventType: string, callbackData?: T): Atomic.EventCallbackMetaData;
 
     export interface PathInfo {
 
@@ -36,170 +77,63 @@ declare module Atomic {
 
     }
 
-    export interface ScreenModeEvent {
+    export interface Ray {
+        /** Ray origin */
+        origin: Atomic.Vector3;
 
-        width: number;
-        height: number;
-        fullscreen: boolean;
-        resizable: boolean;
-        borderless: boolean;
-
+        /** Ray direction */
+        direction: Atomic.Vector3;
     }
 
-    export interface KeyDownEvent {
-
-        // keycode
-        key: number;
-        //  Atomic.QUAL_SHIFT, Atomic.QUAL_CTRL, Atomic.QUAL_ALT, Atomic.QUAL_ANY
-        qualifiers: number;
-
-        // mouse buttons down
-        buttons: number;
-
+    export interface Camera {
+        getScreenRay(x: number, y: number): Atomic.Ray;
     }
 
-    export interface KeyUpEvent {
+    export interface Octree {
+        /**
+         * Cast a ray returing a single hit
+         * @param  {Atomic.Ray} ray
+         * @param  {Atomic.RayQueryLevel} level defaults to Atomic.RAY_TRIANGLE
+         * @param  {number} maxDistance defaults to Atomic.M_INFINITY
+         * @param  {number} drawableFlags defaults to Atomic.DRAWABLE_ANY
+         * @param  {number} viewMask defaults to Atomic.DEFAULT_VIEWMASK
+         * @return {Atomic.RayQueryResult}
+         */
+        rayCastSingle(ray: Atomic.Ray, level?: Atomic.RayQueryLevel, maxDistance?: number, drawableFlags?: number, viewMask?: number):Atomic.RayQueryResult;
 
-        // keycode
-        key: number;
-        //  Atomic.QUAL_SHIFT, Atomic.QUAL_CTRL, Atomic.QUAL_ALT, Atomic.QUAL_ANY
-        qualifiers: number;
-        // mouse buttons down
-        buttons: number;
-
+        /**
+         * Cast a ray returning all hits
+         * @param  {Atomic.Ray} ray
+         * @param  {Atomic.RayQueryLevel} level defaults to Atomic.RAY_TRIANGLE
+         * @param  {number} maxDistance defaults to Atomic.M_INFINITY
+         * @param  {number} drawableFlags defaults to Atomic.DRAWABLE_ANY
+         * @param  {number} viewMask defaults to Atomic.DEFAULT_VIEWMASK
+         * @return {Atomic.RayQueryResult}
+         */
+        rayCast(ray: Atomic.Ray, level?: Atomic.RayQueryLevel, maxDistance?: number, drawableFlags?: number, viewMask?: number):Atomic.RayQueryResult[];
     }
 
-    export interface UIShortcutEvent {
+    export interface RayQueryResult {
+        /** Hit position in world space. */
+        position: Atomic.Vector3;
 
-        // keycode
-        key: number;
-        //  Atomic.QUAL_SHIFT, Atomic.QUAL_CTRL, Atomic.QUAL_ALT, Atomic.QUAL_ANY
-        qualifiers: number;
+        /** Hit normal in world space. Negation of ray direction if per-triangle data not available. */
+        normal: Atomic.Vector3;
 
-    }
+        /** Hit texture position */
+        textureUV: Atomic.Vector2;
 
-    export interface UIListViewSelectionChangedEvent {
+        /** Distance from ray origin. */
+        distance:number;
 
-        refid: string;
-        selected: boolean;
+        /** Drawable. */
+        drawable: any;
 
-    }
-
-    export interface NodeAddedEvent {
-
-        scene: Atomic.Scene;
-        parent: Atomic.Node;
+        /** Scene node. */
         node: Atomic.Node;
 
-    }
-
-    export interface NodeRemovedEvent {
-
-        scene: Atomic.Scene;
-        parent: Atomic.Node;
-        node: Atomic.Node;
-
-    }
-
-    export interface NodeNameChangedEvent {
-
-        scene: Atomic.Scene;
-        node: Atomic.Node;
-
-    }
-
-    export interface UIWidgetEvent {
-
-        handler: UIWidget;
-        target: UIWidget;
-        type: number; /*UIWidgetEventType*/
-        x: number;
-        y: number;
-        deltax: number;
-        deltay: number;
-        count: number;
-        key: number;
-        specialkey: number;
-        modifierkeys: number;
-        refid: string;
-        touch: boolean;
-    }
-
-    export interface UIWidgetFocusChangedEvent {
-        widget: UIWidget;
-        focused: boolean;
-    }
-
-    export interface UIWidgetEditCompleteEvent {
-        widget: UIWidget;
-    }
-
-    export interface UIWidgetDeletedEvent {
-
-        widget: UIWidget;
-    }
-
-    export interface DragBeginEvent {
-
-        source: UIWidget;
-        dragObject: UIDragObject;
-    }
-
-    export interface DragEnterWidgetEvent {
-
-        widget: UIWidget;
-        dragObject: UIDragObject;
-    }
-
-    export interface DragExitWidgetEvent {
-
-        widget: UIWidget;
-        dragObject: UIDragObject;
-    }
-
-    export interface DragEndedEvent {
-
-        target: UIWidget;
-        dragObject: UIDragObject;
-    }
-
-    export interface TemporaryChangedEvent {
-
-        serializable: Atomic.Serializable;
-
-    }
-
-    export interface ComponentAddedEvent {
-
-        scene: Atomic.Scene;
-        node: Atomic.Node;
-        component: Atomic.Component;
-
-    }
-
-    export interface ComponentRemovedEvent {
-
-        scene: Atomic.Scene;
-        node: Atomic.Node;
-        component: Atomic.Component;
-
-    }
-
-    export interface IPCJSErrorEvent {
-
-        errorName: string;
-        errorMessage: string;
-        errorFileName: string;
-        errorLineNumber: number;
-        errorStack: string;
-
-    }
-
-
-    export interface IPCMessageEvent {
-
-        message: string;
-        value: number;
+        /** Drawable specific subobject if applicable. */
+        subObject: number;
     }
 
     export interface AttributeInfo {
@@ -211,7 +145,9 @@ declare module Atomic {
         enumNames: string[];
         resourceTypeName: string;
         dynamic: boolean;
-
+        tooltip: string;
+        isArray:boolean;
+        fixedArraySize:number;
     }
 
     export interface ShaderParameter {
@@ -243,6 +179,7 @@ declare module Atomic {
     export function destroy(component: Atomic.JSComponent): boolean;
 
     export function getParentPath(path: string): string;
+    export function getPath(path: string): string;
     export function addTrailingSlash(path: string): string;
     export function getExtension(path: string): string;
 
@@ -250,144 +187,15 @@ declare module Atomic {
 
 }
 
-declare module AtomicNET {
-
-    export interface CSComponentClassChangedEvent {
-
-        cscomponent: CSComponent;
-        classname: string;
-
-    }
-
-}
-
-declare module Editor {
-
-    export interface SceneNodeSelectedEvent {
-        scene: Atomic.Scene;
-        node: Atomic.Node;
-        selected: boolean;
-        quiet: boolean;
-    }
-
-    export interface SceneEditAddRemoveNodesEvent {
-
-        end: boolean;
-
-    }
-
-
-    export interface SceneEditNodeAddedEvent {
-
-        scene: Atomic.Scene;
-        parent: Atomic.Node;
-        node: Atomic.Node;
-
-    }
-
-    export interface SceneEditNodeRemovedEvent {
-
-        scene: Atomic.Scene;
-        parent: Atomic.Node;
-        node: Atomic.Node;
-
-    }
-
-    export interface SceneEditComponentAddedRemovedEvent {
-
-        scene: Atomic.Scene;
-        node: Atomic.Node;
-        component: Atomic.Component;
-        removed: boolean;
-    }
-
-    export interface SceneEditStateChangeEvent {
-
-        serializable: Atomic.Serializable;
-
-    }
-
-    export interface SceneEditNodeCreatedEvent {
-        node: Atomic.Node;
-    }
-
-    export interface GizmoEditModeChangedEvent {
-        mode: EditMode;
-    }
-
-    export interface GizmoAxisModeChangedEvent {
-        mode: AxisMode;
-    }
-
-}
 
 declare module ToolCore {
-
-    export interface ResourceAddedEvent {
-
-        guid: string;
-
-    }
-
-    export interface ResourceRemovedEvent {
-
-        guid: string;
-
-    }
-
-    export interface LicenseDeactivationErrorEvent {
-
-        message: string;
-
-    }
-
-    export interface AssetImportErrorEvent {
-
-        path: string;
-        guid: string;
-        error: string;
-    }
-
-    export interface AssetRenamedEvent {
-
-        asset: Asset;
-
-    }
-
-    export interface AssetMovedEvent {
-
-        asset: Asset;
-        oldPath: string;
-
-    }
-
-
-    export interface PlatformChangedEvent {
-
-        platform: ToolCore.Platform;
-
-    }
-
-    export interface BuildOutputEvent {
-
-        text: string;
-
-    }
-
-    export interface BuildCompleteEvent {
-
-        platformID: number;
-        message: string;
-        success: boolean;
-        buildFolder: string;
-
-    }
 
     export var toolEnvironment: ToolEnvironment;
     export var toolSystem: ToolSystem;
     export var assetDatabase: AssetDatabase;
     export var licenseSystem: LicenseSystem;
     export var buildSystem: BuildSystem;
+    export var netProjectSystem: NETProjectSystem;
 
     export function getToolEnvironment(): ToolEnvironment;
     export function getToolSystem(): ToolSystem;

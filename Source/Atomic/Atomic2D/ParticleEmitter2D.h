@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -37,7 +37,7 @@ struct Particle2D
     float timeToLive_;
 
     /// Position.
-    Vector2 position_;
+    Vector3 position_;
     /// Size.
     float size_;
     /// Size delta.
@@ -75,7 +75,7 @@ struct Particle2D
 /// 2D particle emitter component.
 class ATOMIC_API ParticleEmitter2D : public Drawable2D
 {
-    OBJECT(ParticleEmitter2D);
+    ATOMIC_OBJECT(ParticleEmitter2D, Drawable2D);
 
 public:
     /// Construct.
@@ -117,6 +117,15 @@ public:
     /// Return sprite attribute.
     ResourceRef GetSpriteAttr() const;
 
+    // ATOMIC BEGIN
+
+    /// Set emission state.
+    void SetEmitting(bool enable);
+    /// Return emission state.
+    bool IsEmitting() const;
+
+    // ATOMIC END
+
 private:
     /// Handle scene being assigned.
     virtual void OnSceneSet(Scene* scene);
@@ -143,8 +152,8 @@ private:
     SharedPtr<Sprite2D> sprite_;
     /// Blend mode.
     BlendMode blendMode_;
-    /// Num particles.
-    int numParticles_;
+    /// Number of particles.
+    unsigned numParticles_;
     /// Emission time.
     float emissionTime_;
     /// Emit particle time
@@ -155,6 +164,14 @@ private:
     Vector3 boundingBoxMinPoint_;
     /// Bounding box max point.
     Vector3 boundingBoxMaxPoint_;
+
+    // ATOMIC BEGIN
+
+    /// Emission enabled.
+    bool emitting_;
+
+    // ATOMIC END
+
 };
 
 }

@@ -37,10 +37,10 @@ namespace Atomic
 static MODIFIER_KEYS GetModifierKeys(int qualifiers, bool superKey)
 {
     MODIFIER_KEYS code = TB_MODIFIER_NONE;
-    if (qualifiers & QUAL_ALT)	code |= TB_ALT;
-    if (qualifiers & QUAL_CTRL)	code |= TB_CTRL;
-    if (qualifiers & QUAL_SHIFT)	code |= TB_SHIFT;
-    if (superKey)	code |= TB_SUPER;
+    if (qualifiers & QUAL_ALT)    code |= TB_ALT;
+    if (qualifiers & QUAL_CTRL)    code |= TB_CTRL;
+    if (qualifiers & QUAL_SHIFT)    code |= TB_SHIFT;
+    if (superKey)    code |= TB_SUPER;
     return code;
 }
 
@@ -309,13 +309,13 @@ static bool InvokeKey(UI* ui, TBWidget* root, unsigned int key, SPECIAL_KEY spec
 
 void UI::HandleKey(bool keydown, int keycode, int scancode)
 {
-    if (keydown && (keycode == KEY_ESC || keycode == KEY_RETURN || keycode == KEY_RETURN2 || keycode == KEY_KP_ENTER)
+    if (keydown && (keycode == KEY_ESCAPE || keycode == KEY_RETURN || keycode == KEY_RETURN2 || keycode == KEY_KP_ENTER)
             && TBWidget::focused_widget)
     {
         SendEvent(E_UIWIDGETFOCUSESCAPED);
     }
 
-#ifdef ATOMIC_PLATFORM_WINDOWS
+#ifndef ATOMIC_PLATFORM_OSX
     if (keycode == KEY_LCTRL || keycode == KEY_RCTRL)
         return;
 #else
@@ -326,7 +326,7 @@ void UI::HandleKey(bool keydown, int keycode, int scancode)
     Input* input = GetSubsystem<Input>();
     int qualifiers = input->GetQualifiers();
 
-#ifdef ATOMIC_PLATFORM_WINDOWS
+#ifndef ATOMIC_PLATFORM_OSX
     bool superdown = input->GetKeyDown(KEY_LCTRL) || input->GetKeyDown(KEY_RCTRL);
 #else
     bool superdown = input->GetKeyDown(KEY_LGUI) || input->GetKeyDown(KEY_RGUI);
@@ -414,7 +414,7 @@ void UI::HandleKey(bool keydown, int keycode, int scancode)
     case KEY_BACKSPACE:
         specialKey = TB_KEY_BACKSPACE;
         break;
-    case KEY_ESC:
+    case KEY_ESCAPE:
         specialKey =  TB_KEY_ESC;
         break;
     }
@@ -448,7 +448,7 @@ void UI::HandleKeyDown(StringHash eventType, VariantMap& eventData)
     // Send Global Shortcut
     Input* input = GetSubsystem<Input>();
 
-#ifdef ATOMIC_PLATFORM_WINDOWS
+#ifndef ATOMIC_PLATFORM_OSX
     bool superdown = input->GetKeyDown(KEY_LCTRL) || input->GetKeyDown(KEY_RCTRL);
     if (keycode == KEY_LCTRL || keycode == KEY_RCTRL)
         superdown = false;

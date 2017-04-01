@@ -2,21 +2,22 @@
 	"name" : "ToolCore",
 	"sources" : ["Source/ToolCore", "Source/ToolCore/Project", "Source/ToolCore/Platform", "Source/ToolCore/Command",
 							 "Source/ToolCore/Import", "Source/ToolCore/Assets", "Source/ToolCore/License", "Source/ToolCore/Build",
-						 	 "Source/ToolCore/Subprocess"],
+						 	 "Source/ToolCore/Subprocess", "Source/ToolCore/NETTools"],
 	"classes" : ["ToolEnvironment", "ToolSystem", "ToolPrefs", "SubprocessSystem", "Subprocess",
-								"Project", "ProjectFile", "Platform", "PlatformMac", "PlatformWeb",
-							 "PlatformWindows", "PlatformAndroid", "PlatformIOS", "Command", "PlayCmd", "OpenAssetImporter",
+								"Project", "ProjectSettings", "ProjectFile", "Platform", "PlatformMac", "PlatformWeb",
+							 "PlatformWindows", "PlatformAndroid", "PlatformIOS", "PlatformLinux", "Command", "PlayCmd", "OpenAssetImporter",
 							 "Asset", "AssetDatabase", "AssetImporter", "AudioImporter", "ModelImporter", "MaterialImporter", "AnimationImportInfo",
 							 "PrefabImporter", "JavascriptImporter", "JSONImporter",
-							 "TextureImporter", "SpriterImporter", "PEXImporter", "NETAssemblyImporter",
+							 "TextureImporter", "SpriterImporter", "PEXImporter", "CSharpImporter", "NETAssemblyImporter",
 							 "LicenseSystem",
 						 	 "ProjectUserPrefs", "ProjectBuildSettings",
-						 	 "BuildBase", "BuildSystem", "BuildMac", "BuildWeb", "BuildWindows", "BuildAndroid", "BuildIOS",
-						 	 "ProjectBuildSettings", "MacBuildSettings", "WindowsBuildSettings", "WebBuildSettings", "AndroidBuildSettings", "IOSBuildSettings"],
+							 "NETProjectSystem", "NETBuild",
+						 	 "BuildBase", "BuildSystem", "BuildMac", "BuildWeb", "BuildWindows", "BuildAndroid", "BuildIOS", "BuildLinux",
+						 	 "ProjectBuildSettings", "MacBuildSettings", "WindowsBuildSettings", "WebBuildSettings", "AndroidBuildSettings", "IOSBuildSettings", "LinuxBuildSettings"],
 	"typescript_decl" : {
 
 		"ModelImporter" : [
-			"getAnimations():Atomic.Animation[];"	
+			"getAnimations():Atomic.Animation[];"
 		],
 		"AssetDatabase" : [
 			"getFolderAssets(folder:string):ToolCore.Asset[];",

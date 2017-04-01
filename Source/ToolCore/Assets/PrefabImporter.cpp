@@ -25,7 +25,6 @@
 #include <Atomic/Scene/Scene.h>
 #include <Atomic/Scene/PrefabEvents.h>
 #include <Atomic/Scene/PrefabComponent.h>
-#include <Atomic/Atomic2D/AnimatedSprite2D.h>
 #include <Atomic/IO/FileSystem.h>
 
 #include "Asset.h"
@@ -35,9 +34,12 @@
 namespace ToolCore
 {
 
-PrefabImporter::PrefabImporter(Context* context, Asset* asset) : AssetImporter(context, asset)
+PrefabImporter::PrefabImporter(Context* context, Asset* asset) : AssetImporter(context, asset),
+    lastFileStamp_(0xFFFFFFFF)
 {
-    SubscribeToEvent(E_PREFABSAVE, HANDLER(PrefabImporter, HandlePrefabSave));
+    requiresCacheFile_ = true;
+
+    SubscribeToEvent(E_PREFABSAVE, ATOMIC_HANDLER(PrefabImporter, HandlePrefabSave));
 }
 
 PrefabImporter::~PrefabImporter()
@@ -90,17 +92,6 @@ void PrefabImporter::HandlePrefabSave(StringHash eventType, VariantMap& eventDat
         {
             rootComponents[i]->SetTemporary(false);
             tempComponents.Push(rootComponents[i]);
-
-            // Animated sprites contain a temporary node we don't want to save in the prefab
-            // it would be nice if this was general purpose because have to test this when
-            // breaking node as well
-            if (rootComponents[i]->GetType() == AnimatedSprite2D::GetTypeStatic())
-            {
-                AnimatedSprite2D* asprite = (AnimatedSprite2D*) rootComponents[i].Get();
-                if (asprite->GetRootNode())
-                    filterNodes.Push(asprite->GetRootNode());
-            }
-
         }
     }
 
@@ -152,12 +143,21 @@ void PrefabImporter::HandlePrefabSave(StringHash eventType, VariantMap& eventDat
     FileSystem* fs = GetSubsystem<FileSystem>();
     fs->Copy(asset_->GetPath(), asset_->GetCachePath());
 
+    asset_->UpdateFileTimestamp();
+    lastFileStamp_ = asset_->GetFileTimestamp();
+
     OnPrefabFileChanged();
 
 }
 
 bool PrefabImporter::Import()
 {
+
+    // The asset database will see the file changed, when the file watcher catches it
+    // though we already loaded/imported in OnPrefabFileChanged
+    if (lastFileStamp_ == asset_->GetFileTimestamp())
+        return true;
+
     FileSystem* fs = GetSubsystem<FileSystem>();
 
     fs->Copy(asset_->GetPath(), asset_->GetCachePath());
@@ -170,7 +170,6 @@ bool PrefabImporter::Import()
 void PrefabImporter::OnPrefabFileChanged()
 {
     // reload it immediately so it is ready for use
-    // TODO: The resource cache is reloading after this reload due to catching the file cache
     ResourceCache* cache = GetSubsystem<ResourceCache>();
     XMLFile* xmlfile = cache->GetResource<XMLFile>(asset_->GetGUID());
     cache->ReloadResource(xmlfile);

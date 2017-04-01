@@ -29,20 +29,20 @@ class ModalWindow extends Atomic.UIWindow {
         super();
 
         if (disableClose)
-          this.settings = Atomic.UI_WINDOW_SETTINGS_DEFAULT & ~Atomic.UI_WINDOW_SETTINGS_CLOSE_BUTTON;
+          this.settings = Atomic.UI_WINDOW_SETTINGS.UI_WINDOW_SETTINGS_DEFAULT & ~Atomic.UI_WINDOW_SETTINGS.UI_WINDOW_SETTINGS_CLOSE_BUTTON;
 
         var view = EditorUI.getView();
         view.addChild(this);
 
         this.setFocus();
 
-        this.subscribeToEvent(this, "WidgetDeleted", (event: Atomic.UIWidgetDeletedEvent) => {
+        this.subscribeToEvent(this, Atomic.UIWidgetDeletedEvent((event: Atomic.UIWidgetDeletedEvent) => {
 
             this.hide();
 
-        });
+        }));
 
-        this.subscribeToEvent(this, "WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(this, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 

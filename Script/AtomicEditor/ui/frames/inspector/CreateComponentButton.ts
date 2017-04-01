@@ -46,6 +46,7 @@ geometryCreateSource.addItem(new Atomic.UIMenuItem("AnimationController", "Anima
 geometryCreateSource.addItem(new Atomic.UIMenuItem("BillboardSet", "BillboardSet"));
 geometryCreateSource.addItem(new Atomic.UIMenuItem("CustomGeometry", "CustomGeometry"));
 geometryCreateSource.addItem(new Atomic.UIMenuItem("ParticleEmitter", "ParticleEmitter"));
+geometryCreateSource.addItem(new Atomic.UIMenuItem("RibbonTrail", "RibbonTrail"));
 geometryCreateSource.addItem(new Atomic.UIMenuItem("Skybox", "SkyBox"));
 geometryCreateSource.addItem(new Atomic.UIMenuItem("StaticModelGroup", "StaticModelGroup"));
 geometryCreateSource.addItem(new Atomic.UIMenuItem("Terrain", "Terrain"));
@@ -132,7 +133,7 @@ class CreateComponentButton extends Atomic.UIButton {
 
         this.text = "Create Component";
 
-        this.subscribeToEvent("WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 
@@ -142,16 +143,16 @@ class CreateComponentButton extends Atomic.UIButton {
         var menu = new Atomic.UIMenuWindow(this, "create component popup");
         menu.fontDescription = this.fd;
         menu.show(componentCreateSource);
-    };
+    }
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent) {
 
-        if (ev.type != Atomic.UI_EVENT_TYPE_CLICK)
+        if (ev.type != Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK)
             return;
 
         if (ev.target && ev.target.id == "create component popup") {
 
-            this.sendEvent("SelectionCreateComponent", { componentTypeName : ev.refid});
+            this.sendEvent(Editor.SelectionCreateComponentEventData({ componentTypeName : ev.refid}));
 
             return true;
 

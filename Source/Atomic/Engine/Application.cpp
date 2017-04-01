@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,23 +23,33 @@
 #include "../Precompiled.h"
 
 #include "../Engine/Application.h"
-#include "../Engine/Engine.h"
-#ifdef IOS
-#include "../Graphics/Graphics.h"
-#include "../Graphics/GraphicsImpl.h"
-#endif
 #include "../IO/IOEvents.h"
 #include "../IO/Log.h"
 
+#ifdef IOS
+#include "../Graphics/Graphics.h"
+// ATOMIC BEGIN
+#include <SDL/include/SDL.h>
+// ATOMIC END
+#endif
+
 #include "../DebugNew.h"
+
+// ATOMIC BEGIN
+#include "../Metrics/Metrics.h"
+// ATOMIC END
 
 namespace Atomic
 {
 
-#if defined(IOS) || defined(EMSCRIPTEN)
+// ATOMIC BEGIN
+bool Application::autoMetrics_ = false;
+// ATOMIC END
+
+#if defined(IOS) || defined(__EMSCRIPTEN__)
 // Code for supporting SDL_iPhoneSetAnimationCallback() and emscripten_set_main_loop_arg()
-#if defined(EMSCRIPTEN)
-#include <emscripten.h>
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
 #endif
 void RunFrame(void* data)
 {
@@ -53,11 +63,25 @@ Application::Application(Context* context) :
 {
     engineParameters_ = Engine::ParseParameters(GetArguments());
 
+    // ATOMIC BEGIN
+
+    // register metrics subsystem
+    context->RegisterSubsystem(new Metrics(context));
+
+    if (autoMetrics_ || engineParameters_["AutoMetrics"].GetBool())
+    {
+        // ensure autoMetrics reflects state
+        autoMetrics_ = true;
+        context->GetSubsystem<Metrics>()->Enable();
+    }
+
+    // ATOMIC END
+
     // Create the Engine, but do not initialize it yet. Subsystems except Graphics & Renderer are registered at this point
     engine_ = new Engine(context);
 
     // Subscribe to log messages so that can show errors if ErrorExit() is called with empty message
-    SubscribeToEvent(E_LOGMESSAGE, HANDLER(Application, HandleLogMessage));
+    SubscribeToEvent(E_LOGMESSAGE, ATOMIC_HANDLER(Application, HandleLogMessage));
 }
 
 int Application::Run()
@@ -81,8 +105,8 @@ int Application::Run()
         if (exitCode_)
             return exitCode_;
 
-        // Platforms other than iOS and EMSCRIPTEN run a blocking main loop
-#if !defined(IOS) && !defined(EMSCRIPTEN)
+        // Platforms other than iOS and Emscripten run a blocking main loop
+#if !defined(IOS) && !defined(__EMSCRIPTEN__)
         while (!engine_->IsExiting())
             engine_->RunFrame();
 
@@ -91,8 +115,8 @@ int Application::Run()
         // support calling the Stop() function, as the application will never stop manually
 #else
 #if defined(IOS)
-        SDL_iPhoneSetAnimationCallback(GetSubsystem<Graphics>()->GetImpl()->GetWindow(), 1, &RunFrame, engine_);
-#elif defined(EMSCRIPTEN)
+        SDL_iPhoneSetAnimationCallback(GetSubsystem<Graphics>()->GetWindow(), 1, &RunFrame, engine_);
+#elif defined(__EMSCRIPTEN__)
         emscripten_set_main_loop_arg(RunFrame, engine_, 0, 1);
 #endif
 #endif

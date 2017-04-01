@@ -23,6 +23,7 @@
 #pragma once
 
 #include <TurboBadger/tb_select_item.h>
+#include <TurboBadger/tb_menu_window.h>
 #include "UIWidget.h"
 
 namespace Atomic
@@ -32,7 +33,7 @@ class UISelectItemSource;
 
 class UIMenuWindow : public UIWidget
 {
-    OBJECT(UIMenuWindow)
+    ATOMIC_OBJECT(UIMenuWindow, UIWidget)
 
 public:
 

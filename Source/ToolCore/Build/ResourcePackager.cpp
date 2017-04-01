@@ -24,6 +24,7 @@
 //
 
 #include "Atomic/Core/StringUtils.h"
+#include <Atomic/IO/Log.h>
 #include <Atomic/IO/FileSystem.h>
 #include <Atomic/Container/ArrayPtr.h>
 
@@ -133,7 +134,7 @@ bool ResourcePackager::WritePackageFile(const String& destFilePath)
             unsigned packedSize = LZ4_compressHC((const char*)&buffer[pos], (char*)compressBuffer.Get(), unpackedSize);
             if (!packedSize)
             {
-                buildBase_->FailBuild("LZ4 compression failed for file " + entry->absolutePath_ + " at offset " + pos);
+                buildBase_->FailBuild(ToString("LZ4 compression failed for file %s at offset %u", entry->absolutePath_.CString(), pos));
                 return false;
             }
 

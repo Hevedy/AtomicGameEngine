@@ -31,7 +31,7 @@ class Project;
 
 class BuildWindows : public BuildBase
 {
-    OBJECT(BuildWindows);
+    ATOMIC_OBJECT(BuildWindows, BuildBase);
 
 public:
 
@@ -49,7 +49,8 @@ protected:
 
 private:
 
-    void BuildAtomicNET();
+    void BuildNative(const String& buildPath);
+    bool BuildManaged(const String& buildPath);
 
 };
 

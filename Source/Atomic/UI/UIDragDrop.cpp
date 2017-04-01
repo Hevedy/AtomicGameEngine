@@ -52,9 +52,9 @@ namespace Atomic
 
 UIDragDrop::UIDragDrop(Context* context) : Object(context)
 {
-    SubscribeToEvent(E_MOUSEMOVE, HANDLER(UIDragDrop,HandleMouseMove));
-    SubscribeToEvent(E_MOUSEBUTTONUP, HANDLER(UIDragDrop,HandleMouseUp));
-    SubscribeToEvent(E_MOUSEBUTTONDOWN, HANDLER(UIDragDrop,HandleMouseDown));
+    SubscribeToEvent(E_MOUSEMOVE, ATOMIC_HANDLER(UIDragDrop,HandleMouseMove));
+    SubscribeToEvent(E_MOUSEBUTTONUP, ATOMIC_HANDLER(UIDragDrop,HandleMouseUp));
+    SubscribeToEvent(E_MOUSEBUTTONDOWN, ATOMIC_HANDLER(UIDragDrop,HandleMouseDown));
 
     SharedPtr<UIFontDescription> fd(new UIFontDescription(context));
     fd->SetId("Vera");
@@ -89,11 +89,12 @@ void UIDragDrop::DragEnd()
     SharedPtr<UIWidget> currentTargetWidget(currentTargetWidget_);
     SharedPtr<UIWidget> dragSourceWidget(dragSourceWidget_);
 
+
     // clean up
     currentTargetWidget_ = 0;
     dragObject_ = 0;
     dragSourceWidget_ = 0;
-    dragLayout_->SetVisibility(UI_WIDGET_VISIBILITY_GONE);
+    dragLayout_->SetVisibility(UI_WIDGET_VISIBILITY_GONE);    
 
     if (currentTargetWidget.Null())
     {
@@ -212,7 +213,7 @@ void UIDragDrop::HandleMouseMove(StringHash eventType, VariantMap& eventData)
     // see if we have a widget
     TBWidget* tbw = TBWidget::hovered_widget;
 
-    while(tbw && !tbw->GetDelegate())
+    while(tbw && (!tbw->GetDelegate() || tbw->IsOfType<TBLayout>()))
     {
         tbw = tbw->GetParent();
     }

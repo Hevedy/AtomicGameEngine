@@ -12,6 +12,28 @@ elements
 		cut 16
 		expand 12
 		padding 0
+
+	Checkerboard
+		type StretchBox
+		bitmap checkerboard.png
+	HSVSkin
+		type StretchBox
+		bitmap HSV21.png
+	AccentColor1
+		text-color #D4FB79
+	AccentColor2
+		text-color #76D6FF
+	AccentColor3
+		text-color #9A7DA1
+	AccentColor4
+		text-color #AAAAAA
+	AccentColorWarn
+		text-color #ffff66
+	AccentColorError
+		text-color #ff3333
+	AccentColorSuccess
+		text-color #33ff33
+
 	Folder
 		text-color #aaaaaa
 	Folder.selected
@@ -87,6 +109,9 @@ elements
 	StepButton
 		bitmap step.png
 
+	BlendleftButton
+		bitmap blendleft.png
+
 	PowerOffButton
 		bitmap power_off.png
 
@@ -108,6 +133,9 @@ elements
 
 	LogoMac
 		bitmap logo_mac.png
+
+	LogoLinux
+		bitmap logo_linux.png
 
 	LogoWindows-Small
 		bitmap logo_windows.png
@@ -136,6 +164,11 @@ elements
 
 	LogoWindows-Small
 		bitmap logo_windows.png
+		width 48
+		height 48
+
+	LogoLinux-Small
+		bitmap logo_linux.png
 		width 48
 		height 48
 
@@ -187,6 +220,12 @@ elements
 		text-color #aaaaaa
 		min-width 140
 		max-width 140
+
+	InspectorPrefabTextAttrName
+		padding 4
+		text-color #aaaaaa
+		min-width 110
+		max-width 110
 
 	HierarchyPrefabText
 		text-color #11aaaa

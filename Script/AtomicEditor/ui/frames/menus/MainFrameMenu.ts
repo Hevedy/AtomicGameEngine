@@ -21,7 +21,6 @@
 //
 
 import strings = require("../../EditorStrings");
-import EditorEvents = require("../../../editor/EditorEvents");
 import EditorUI = require("../../EditorUI");
 import MenuItemSources = require("./MenuItemSources");
 import Preferences = require("editor/Preferences");
@@ -41,13 +40,13 @@ class MainFrameMenu extends Atomic.ScriptObject {
         MenuItemSources.createMenuItemSource("menu tools", toolsItems);
         MenuItemSources.createMenuItemSource("menu developer", developerItems);
         MenuItemSources.createMenuItemSource("menu help", helpItems);
-
+        this.goScreenshot = 0;
     }
 
     createPluginMenuItemSource(id: string, items: any): Atomic.UIMenuItemSource {
         if (!this.pluginMenuItemSource) {
             var developerMenuItemSource = MenuItemSources.getMenuItemSource("menu developer");
-            this.pluginMenuItemSource = MenuItemSources.createSubMenuItemSource(developerMenuItemSource ,"Plugins", {});
+            this.pluginMenuItemSource = MenuItemSources.createSubMenuItemSource(developerMenuItemSource, "Plugins", {});
         }
 
         return MenuItemSources.createSubMenuItemSource(this.pluginMenuItemSource , id, items);
@@ -61,6 +60,16 @@ class MainFrameMenu extends Atomic.ScriptObject {
                 var developerMenuItemSource = MenuItemSources.getMenuItemSource("menu developer");
                 developerMenuItemSource.removeItemWithStr("Plugins");
                 this.pluginMenuItemSource = null;
+            }
+        }
+    }
+
+    handleScreenshot(ev) {
+        if ( this.goScreenshot > 0 ) {
+            this.goScreenshot--;
+            if ( this.goScreenshot == 0 ) {
+                EditorUI.getShortcuts().invokeScreenshot();
+                this.unsubscribeFromEvent("Update");
             }
         }
     }
@@ -140,7 +149,7 @@ class MainFrameMenu extends Atomic.ScriptObject {
         } else if (target.id == "menu file popup") {
             if (refid == "quit") {
 
-                this.sendEvent("ExitRequested");
+                this.sendEvent(Atomic.ExitRequestedEventType);
                 return true;
 
             }
@@ -171,22 +180,22 @@ class MainFrameMenu extends Atomic.ScriptObject {
 
                 }
 
-                var openProject = () => this.sendEvent(EditorEvents.LoadProject, { path: path });
+                var requestProjectLoad = () => this.sendEvent(Editor.RequestProjectLoadEventData({ path: path }));
 
                 if (ToolCore.toolSystem.project) {
 
-                    this.subscribeToEvent(EditorEvents.ProjectClosed, () => {
+                    this.subscribeToEvent(Editor.EditorProjectClosedEvent(() => {
 
-                        this.unsubscribeFromEvent(EditorEvents.ProjectClosed);
-                        openProject();
+                        this.unsubscribeFromEvent(Editor.EditorProjectClosedEventType);
+                        requestProjectLoad();
 
-                    });
+                    }));
 
-                    this.sendEvent(EditorEvents.CloseProject);
+                    this.sendEvent(Editor.EditorCloseProjectEventType);
 
                 } else {
 
-                    openProject();
+                    requestProjectLoad();
 
                 }
 
@@ -196,7 +205,7 @@ class MainFrameMenu extends Atomic.ScriptObject {
 
             if (refid == "file close project") {
 
-                this.sendEvent(EditorEvents.CloseProject);
+                this.sendEvent(Editor.EditorCloseProjectEventType);
 
                 return true;
 
@@ -213,13 +222,33 @@ class MainFrameMenu extends Atomic.ScriptObject {
             }
 
             if (refid == "file save all") {
-                this.sendEvent(EditorEvents.SaveAllResources);
+                this.sendEvent(Editor.EditorSaveAllResourcesEventType);
                 return true;
             }
 
             return false;
 
         } else if (target.id == "menu developer popup") {
+
+            if (refid == "toggle theme") {
+                Preferences.getInstance().toggleTheme();
+                return true;
+            }
+
+            if (refid == "toggle codeeditor") {
+                var ctheme = EditorUI.getEditor().getApplicationPreference( "codeEditor", "theme", "");
+                if ( ctheme == "vs-dark" )
+                    EditorUI.getEditor().setApplicationPreference( "codeEditor", "theme", "vs");
+                else
+                    EditorUI.getEditor().setApplicationPreference( "codeEditor", "theme", "vs-dark");
+                return true;
+            }
+
+            if ( refid == "screenshot") {
+                this.subscribeToEvent(Atomic.UpdateEvent((ev) => this.handleScreenshot(ev)));
+                this.goScreenshot = 19;  // number of ticks to wait for the menu to close
+                return true;
+            }
 
             if (refid == "developer show console") {
                 Atomic.ui.showConsole(true);
@@ -263,6 +292,26 @@ class MainFrameMenu extends Atomic.ScriptObject {
                 return true;
             }
 
+            // Development UI adjustments for Project Frame
+
+            if (refid.indexOf("developer ui width") != -1) {
+
+                let scale = 1;
+                scale = refid.indexOf("1.5x") == -1 ? scale : 1.5;
+                scale = refid.indexOf("2x") == -1 ? scale : 2;
+                scale = refid.indexOf("3x") == -1 ? scale : 3;
+                scale = refid.indexOf("4x") == -1 ? scale : 4;
+
+                EditorUI.getEditor().setApplicationPreference( "developmentUI", "projectFrameWidthScalar", scale.toString());
+
+                this.sendEvent("DevelopmentUIEvent", {
+                    "subEvent" : "ScaleFrameWidth",
+                    "arg0" : "projectframe",
+                    "arg1" : scale
+                });
+
+            }
+
             // If we got here, then we may have been injected by a plugin.  Notify the plugins
             return ServiceLocator.uiServices.menuItemClicked(refid);
 
@@ -271,6 +320,19 @@ class MainFrameMenu extends Atomic.ScriptObject {
             if (refid == "tools toggle profiler") {
                 Atomic.ui.toggleDebugHud();
                 return true;
+            } if (refid == "tools perf profiler") {
+                Atomic.ui.debugHudProfileMode = Atomic.DebugHudProfileMode.DEBUG_HUD_PROFILE_PERFORMANCE;
+                Atomic.ui.showDebugHud(true);
+                return true;
+            } else if (refid == "tools metrics profiler") {
+                Atomic.ui.debugHudProfileMode = Atomic.DebugHudProfileMode.DEBUG_HUD_PROFILE_METRICS;
+                Atomic.ui.showDebugHud(true);
+                return true;
+            } else if (refid.indexOf("tools log") != -1) {
+
+                let logName = refid.indexOf("editor") != -1 ? "AtomicEditor" : "AtomicPlayer";
+                let logFolder = Atomic.fileSystem.getAppPreferencesDir(logName, "Logs");
+                Atomic.fileSystem.systemOpen(logFolder);
             }
 
         } else if (target.id == "menu build popup") {
@@ -289,38 +351,42 @@ class MainFrameMenu extends Atomic.ScriptObject {
             }
 
         } else if (target.id == "menu help popup") {
+
             if (refid == "about atomic editor") {
                 EditorUI.getModelOps().showAbout();
                 return true;
             }
-            if (refid == "manage license") {
-                EditorUI.getModelOps().showManageLicense();
-                return true;
-            }
-            if (refid == "help forums") {
-                Atomic.fileSystem.systemOpen("http://atomicgameengine.com/forum/");
-                return true;
-            } else if (refid == "help chat") {
-                Atomic.fileSystem.systemOpen("https://gitter.im/AtomicGameEngine/AtomicGameEngine/");
-                return true;
-            }
-            else if (refid == "help getting started") {
-                Atomic.fileSystem.systemOpen("http://atomicgameengine.com/learn/");
-                return true;
-            } else if (refid == "help github") {
-                Atomic.fileSystem.systemOpen("https://github.com/AtomicGameEngine/AtomicGameEngine/");
-                return true;
-            } else if (refid == "help api") {
-                var url = "file://" + ToolCore.toolEnvironment.toolDataDir + "Docs/JSDocs/index.html";
-                Atomic.fileSystem.systemOpen(url);
+
+            if (refid == "help what new") {
+                EditorUI.getModelOps().showNewBuildWindow(false);
                 return true;
             }
 
+            let urlLookup = {
+
+                "help doc wiki" : "https://github.com/AtomicGameEngine/AtomicGameEngine/wiki/",
+                "help chat" : "https://gitter.im/AtomicGameEngine/AtomicGameEngine/",
+                "help api js" : "http://docs.atomicgameengine.com/api/modules/atomic.html",
+                "help api csharp" : "http://docs.atomicgameengine.com/csharp/AtomicEngine/",
+                "help api cplusplus" : "http://docs.atomicgameengine.com/cpp",
+                "help support" : "https://discourse.atomicgameengine.com/",
+                "help github" : "https://github.com/AtomicGameEngine/AtomicGameEngine/"
+            };
+
+            if (urlLookup[refid]) {
+                Atomic.fileSystem.systemOpen(urlLookup[refid]);
+                return true;
+            }
+
+            return false;
+
         } else {
-            console.log("Menu: " + target.id + " clicked");
+            // console.log("Menu: " + target.id + " clicked");
         }
 
     }
+
+    goScreenshot: number;
 
 }
 
@@ -357,8 +423,16 @@ var editItems = {
 };
 
 var toolsItems = {
+    "Profiler": {
+        "Toggle HUD": ["tools toggle profiler"],
+        "Profile Performance": ["tools perf profiler"],
+        "Profile Metrics": ["tools metrics profiler"]
+    },
+    "Logs": {
+        "Player Log": ["tools log player"],
+        "Editor Log": ["tools log editor"]
+    }
 
-    "Toggle Profiler": ["tools toggle profiler"]
 
 };
 
@@ -370,7 +444,20 @@ var buildItems = {
 
 
 var developerItems = {
-
+    "UI": {
+        "Project Frame": {
+            "1x": ["developer ui width project 1x"],
+            "1.5x": ["developer ui width project 1.5x"],
+            "2x": ["developer ui width project 2x"],
+            "3x": ["developer ui width project 3x"],
+            "4x": ["developer ui width project 4x"]
+        }
+    },     
+    "Theme": {
+        "Toggle Theme": ["toggle theme"],
+        "Toggle Code Editor Theme": ["toggle codeeditor"]
+    }, 
+    "ScreenShot": ["screenshot", StringID.ShortcutScreenshot],
     "Show Console": ["developer show console"],
     "Clear Preferences": ["developer clear preferences"], //Adds clear preference to developer menu items list
     "Debug": {
@@ -380,7 +467,6 @@ var developerItems = {
             "Force Reimport": ["developer assetdatabase force"]
         }
     }
-
 
 };
 
@@ -401,12 +487,18 @@ var fileItems = {
 
 var helpItems = {
 
-    "Getting Started": "help getting started",
-    "API Documentation": ["help api"],
-    "-1": null,
+    "Atomic Community Support": ["help support"],
     "Atomic Chat": ["help chat"],
-    "Atomic Forums": ["help forums"],
+    "-1": null,
+    "Documentation Wiki": "help doc wiki",
+    "API References": {
+        "JavaScript & TypeScript": ["help api js"],
+        "C#": ["help api csharp"],
+        "C++": ["help api cplusplus"]
+    },
     "-2": null,
     "Atomic Game Engine on GitHub": ["help github"],
+    "-3": null,
+    "What's New": "help what new",
     "About Atomic Editor": "about atomic editor"
 };

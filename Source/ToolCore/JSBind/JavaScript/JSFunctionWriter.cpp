@@ -42,7 +42,7 @@ JSFunctionWriter::JSFunctionWriter(JSBFunction *function) : JSBFunctionWriter(fu
 void JSFunctionWriter::WriteParameterMarshal(String& source)
 {
     // generate args
-    Vector<JSBFunctionType*>& parameters = function_->GetParameters();
+    const Vector<JSBFunctionType*>& parameters = function_->GetParameters();
 
     int cparam = 0;
     if (parameters.Size())
@@ -110,8 +110,8 @@ void JSFunctionWriter::WriteParameterMarshal(String& source)
                     {
                         source.Append("}\n");
 
-                        source.AppendWithFormat("%s __arg%i(duk_get_top(ctx) >= %i ? arrayData%i : defaultArg%i);\n",
-                                                klass->GetNativeName().CString(), cparam, cparam + 1, cparam, cparam);
+                        source.AppendWithFormat("%s __arg%i(duk_get_top(ctx) >= %i ? (const %s *) arrayData%i : defaultArg%i.Data());\n",
+                                                klass->GetNativeName().CString(), cparam, cparam + 1, elementType.CString(), cparam, cparam);
                     }
                     else
                     {
@@ -196,10 +196,20 @@ void JSFunctionWriter::WriteParameterMarshal(String& source)
             }
             else if (ptype->type_->asVectorType())
             {
-                // read only vector arguments
-                if (ptype->isConst_)
+                JSBVectorType* vtype = ptype->type_->asVectorType();
+
+                if (vtype->isVariantVector_)
                 {
-                    JSBVectorType* vtype = ptype->type_->asVectorType();
+                    // variant vector arguments
+                    source.AppendWithFormat("VariantVector __arg%i;\nScriptVector* __scriptVectorArg%i = js_to_class_instance<ScriptVector>(ctx, %i, 0);\n", cparam, cparam, cparam);
+                    if (!function_->HasMutatedReturn())
+                        source.AppendWithFormat("__scriptVectorArg%i->AdaptToVector(__arg%i);\n", cparam, cparam);
+                }
+                else if (ptype->isConst_)
+                {                    
+                    // JS/TS side needs work for vector parameters, right now we support const (read only)
+                    // Vector of String/StringHash
+
                     source.AppendWithFormat("%s __arg%i;\n", vtype->ToString().CString(), cparam);
 
                     source.AppendWithFormat("if (duk_get_top(ctx) >= %i)\n{\n", cparam + 1);
@@ -222,7 +232,6 @@ void JSFunctionWriter::WriteParameterMarshal(String& source)
 
                 }
             }
-
         }
     }
 }
@@ -278,7 +287,7 @@ void JSFunctionWriter::WriteConstructor(String& source)
         String sparams;
         int cparam = 0;
 
-        Vector<JSBFunctionType*>& parameters = function_->GetParameters();
+        const Vector<JSBFunctionType*>& parameters = function_->GetParameters();
 
         for (unsigned i = 0; i < parameters.Size(); i++, cparam++)
         {
@@ -311,15 +320,16 @@ void JSFunctionWriter::WriteConstructor(String& source)
         }
 
         source.AppendWithFormat("if (!duk_get_top(ctx) || !duk_is_pointer(ctx, 0))\n"\
-                                "{\n"\
-                                "%s\n"\
-                                "%s* native = new %s(%s);\n" \
-                                "vm->AddObject(ptr, native);\n"\
-                                "}\n" \
-                                "else if (duk_is_pointer(ctx, 0))\n" \
-                                "{\n" \
-                                "vm->AddObject(ptr, (RefCounted*) duk_get_pointer(ctx, 0));\n" \
-                                "}\n", marshal.CString(), klass->GetNativeName().CString(), klass->GetNativeName().CString(), sparams.CString());
+            "{\n"\
+            "%s\n"\
+            "%s* native = new %s(%s);\n" \
+            "vm->AddObject(ptr, native, INSTANTIATION_JAVASCRIPT);\n"\
+            "}\n" \
+            "else if (duk_is_pointer(ctx, 0))\n" \
+            "{\n" \
+            "RefCounted* rc = (RefCounted*) duk_get_pointer(ctx, 0);\n" \
+            "vm->AddObject(ptr, rc, rc->GetInstantiationType());\n" \
+            "}\n", marshal.CString(), klass->GetNativeName().CString(), klass->GetNativeName().CString(), sparams.CString());
     }
     else
     {
@@ -343,12 +353,7 @@ void JSFunctionWriter::WriteConstructor(String& source)
         source.Append("duk_push_this(ctx);\n "\
                       "duk_push_c_function(ctx, jsb_finalizer_RefCounted, 1);\n "\
                       "duk_set_finalizer(ctx, -2);\n "\
-                      \
-                      "RefCounted* ref = JSVM::GetJSVM(ctx)->GetObjectPtr(duk_get_heapptr(ctx, -1));\n "\
-                      "ref->AddRef();\n "\
-                      \
                       "duk_pop(ctx);\n");
-
     }
 
     source += "   return 0;";
@@ -415,7 +420,10 @@ void JSFunctionWriter::WriteFunction(String& source)
             else if (klassType->class_->IsNumberArray())
             {
                 returnDeclared = true;
-                source.AppendWithFormat("const %s& retValue = ", klassType->class_->GetName().CString());
+                if (returnType->isReference_)
+                    source.AppendWithFormat("const %s& retValue = ", klassType->class_->GetName().CString());
+                else
+                    source.AppendWithFormat(" %s retValue = ", klassType->class_->GetName().CString());
             }
             else
             {
@@ -438,22 +446,34 @@ void JSFunctionWriter::WriteFunction(String& source)
 
     }
 
+    const Vector<JSBFunctionType*>& parameters = function_->GetParameters();
+
     if (function_->IsStatic())
     {
         source.AppendWithFormat("%s::%s(", klass->GetNativeName().CString(), function_->name_.CString());
     }
     else
     {
-        source.AppendWithFormat("native->%s(", function_->name_.CString());
-    }
+        if (function_->HasMutatedReturn())
+        {
+            source.AppendWithFormat("__arg%i = native->%s(", parameters.Size() - 1, function_->name_.CString());
+        }
+        else
+        {
+            source.AppendWithFormat("native->%s(", function_->name_.CString());
+        }
 
-    Vector<JSBFunctionType*>& parameters = function_->GetParameters();
+    }    
 
-    for (unsigned int i = 0; i < parameters.Size(); i++)
+    unsigned numParams = parameters.Size();
+    if (numParams && function_->HasMutatedReturn())
+        numParams--;
+
+    for (unsigned int i = 0; i < numParams; i++)
     {
         source.AppendWithFormat("__arg%i",  i);
 
-        if (i != parameters.Size() - 1)
+        if (i != numParams - 1)
         {
             source += ", ";
         }
@@ -461,7 +481,17 @@ void JSFunctionWriter::WriteFunction(String& source)
 
     source += ");\n";
 
-    if (returnDeclared)
+    if (!returnDeclared)
+    {
+        if (function_->HasMutatedReturn())
+        {
+            // this handles the VariantVector case currently, can be expanded
+            source.AppendWithFormat("__scriptVectorArg%i->AdaptFromVector(__arg%i);\n", parameters.Size() - 1,  parameters.Size() - 1);
+        }
+
+        source += "return 0;\n";
+    }
+    else
     {
         if (returnType->type_->asStringType())
         {
@@ -515,19 +545,26 @@ void JSFunctionWriter::WriteFunction(String& source)
         }
         else if (returnType->type_->asVectorType())
         {
+            JSBType* vectorType = returnType->type_->asVectorType()->vectorType_;
+
             source.Append("duk_push_array(ctx);\n");
             source.Append("for (unsigned i = 0; i < retValue.Size(); i++)\n{\n");
-            source.Append("duk_push_string(ctx, retValue[i].CString());\n");
+
+            if (vectorType->asClassType())
+            {
+                source.AppendWithFormat("js_push_class_object_instance(ctx, retValue[i], \"%s\");\n", vectorType->asClassType()->class_->GetName().CString());
+            }
+            else
+            {
+                source.Append("duk_push_string(ctx, retValue[i].CString());\n");
+            }
+
             source.Append("duk_put_prop_index(ctx, -2, i);\n}\n");
         }
 
 
 
         source += "return 1;\n";
-    }
-    else
-    {
-        source += "return 0;\n";
     }
 
     source.Append("}\n");

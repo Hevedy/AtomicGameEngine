@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,6 +25,10 @@
 #include "../Scene/Component.h"
 #include "../Atomic2D/TileMapDefs2D.h"
 
+#ifdef GetObject
+#undef GetObject
+#endif
+
 namespace Atomic
 {
 
@@ -39,7 +43,7 @@ class TmxTileLayer2D;
 /// Tile map component.
 class ATOMIC_API TileMapLayer2D : public Component
 {
-    OBJECT(TileMapLayer2D);
+    ATOMIC_OBJECT(TileMapLayer2D, Component);
 
 public:
     /// Construct.
@@ -97,7 +101,9 @@ public:
     /// Return image node (for image layer only).
     Node* GetImageNode() const;
 
+    // ATOMIC BEGIN
     const String& GetName() const;
+    // ATOMIC END
 
 private:
     /// Set tile layer.

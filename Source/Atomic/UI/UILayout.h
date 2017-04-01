@@ -30,19 +30,19 @@ namespace Atomic
 {
 
 /// Specifies which height widgets in a AXIS_X layout should have,
-///	or which width widgets in a AXIS_Y layout should have.
-///	No matter what, it will still prioritize minimum and maximum for each widget.
+///    or which width widgets in a AXIS_Y layout should have.
+///    No matter what, it will still prioritize minimum and maximum for each widget.
 enum UI_LAYOUT_SIZE
 {
     /// Sizes depend on the gravity for each widget. (If the widget pulls
     /// towards both directions, it should grow to all available space)
-    UI_LAYOUT_SIZE_GRAVITY = tb::LAYOUT_SIZE_GRAVITY,
+    UI_LAYOUT_SIZE_GRAVITY = 0, // tb::LAYOUT_SIZE_GRAVITY,
 
     /// Size will be the preferred so each widget may be sized differently.
-    UI_LAYOUT_SIZE_PREFERRED = tb::LAYOUT_SIZE_PREFERRED,
+    UI_LAYOUT_SIZE_PREFERRED = 1, // tb::LAYOUT_SIZE_PREFERRED,
 
     /// Size should grow to all available space
-    UI_LAYOUT_SIZE_AVAILABLE = tb::LAYOUT_SIZE_AVAILABLE
+    UI_LAYOUT_SIZE_AVAILABLE = 2 // tb::LAYOUT_SIZE_AVAILABLE
 };
 
 /// Specifies which width widgets in a AXIS_X layout should have,
@@ -51,27 +51,27 @@ enum UI_LAYOUT_SIZE
 enum UI_LAYOUT_DISTRIBUTION
 {
     ///< Size will be the preferred so each widget may be sized differently.
-    UI_LAYOUT_DISTRIBUTION_PREFERRED = tb::LAYOUT_DISTRIBUTION_PREFERRED,
+    UI_LAYOUT_DISTRIBUTION_PREFERRED = 0, // tb::LAYOUT_DISTRIBUTION_PREFERRED,
     ///< Size should grow to all available space
-    UI_LAYOUT_DISTRIBUTION_AVAILABLE = tb::LAYOUT_DISTRIBUTION_AVAILABLE,
+    UI_LAYOUT_DISTRIBUTION_AVAILABLE = 1, // tb::LAYOUT_DISTRIBUTION_AVAILABLE,
     ///< Sizes depend on the gravity for each widget. (If the widget pulls
     /// ///< towards both directions, it should grow to all available space)
-    UI_LAYOUT_DISTRIBUTION_GRAVITY = tb::LAYOUT_DISTRIBUTION_GRAVITY
+    UI_LAYOUT_DISTRIBUTION_GRAVITY = 2 // tb::LAYOUT_DISTRIBUTION_GRAVITY
 };
 
 /// Specifies which y position widgets in a AXIS_X layout should have,
-///	or which x position widgets in a AXIS_Y layout should have. */
+///    or which x position widgets in a AXIS_Y layout should have. */
 enum UI_LAYOUT_POSITION
 {
     ///< Position is centered
-    UI_LAYOUT_POSITION_CENTER = tb::LAYOUT_POSITION_CENTER,
+    UI_LAYOUT_POSITION_CENTER = 0, // tb::LAYOUT_POSITION_CENTER,
     ///< Position is to the left for AXIS_Y layout and top for AXIS_X layout.
-    UI_LAYOUT_POSITION_LEFT_TOP = tb::LAYOUT_POSITION_LEFT_TOP,
+    UI_LAYOUT_POSITION_LEFT_TOP = 1, // tb::LAYOUT_POSITION_LEFT_TOP,
     ///< Position is to the right for AXIS_Y layout and bottom for AXIS_X layout.
-    UI_LAYOUT_POSITION_RIGHT_BOTTOM = tb::LAYOUT_POSITION_RIGHT_BOTTOM,
+    UI_LAYOUT_POSITION_RIGHT_BOTTOM = 2, // tb::LAYOUT_POSITION_RIGHT_BOTTOM,
     ///< Position depend on the gravity for each widget. (If the widget pulls
     /// ///< towards both directions, it will be centered)
-    UI_LAYOUT_POSITION_GRAVITY= tb::LAYOUT_POSITION_GRAVITY
+    UI_LAYOUT_POSITION_GRAVITY = 3 // tb::LAYOUT_POSITION_GRAVITY
 };
 
 /** Specifies how widgets should be moved horizontally in a AXIS_X
@@ -79,16 +79,16 @@ enum UI_LAYOUT_POSITION
     available. */
 enum UI_LAYOUT_DISTRIBUTION_POSITION
 {
-    UI_LAYOUT_DISTRIBUTION_POSITION_CENTER = tb::LAYOUT_DISTRIBUTION_POSITION_CENTER,
-    UI_LAYOUT_DISTRIBUTION_POSITION_LEFT_TOP = tb::LAYOUT_DISTRIBUTION_POSITION_LEFT_TOP,
-    UI_LAYOUT_DISTRIBUTION_POSITION_RIGHT_BOTTOM = tb::LAYOUT_DISTRIBUTION_POSITION_RIGHT_BOTTOM
+    UI_LAYOUT_DISTRIBUTION_POSITION_CENTER = 0, // tb::LAYOUT_DISTRIBUTION_POSITION_CENTER,
+    UI_LAYOUT_DISTRIBUTION_POSITION_LEFT_TOP = 1, // tb::LAYOUT_DISTRIBUTION_POSITION_LEFT_TOP,
+    UI_LAYOUT_DISTRIBUTION_POSITION_RIGHT_BOTTOM = 2 //tb::LAYOUT_DISTRIBUTION_POSITION_RIGHT_BOTTOM
 };
 
 
 
 class UILayoutParams : public Object
 {
-    OBJECT(UILayoutParams)
+    ATOMIC_OBJECT(UILayoutParams, Object)
 
 public:
 
@@ -115,7 +115,7 @@ private:
 
 class UILayout : public UIWidget
 {
-    OBJECT(UILayout)
+    ATOMIC_OBJECT(UILayout, UIWidget)
 
 public:
 

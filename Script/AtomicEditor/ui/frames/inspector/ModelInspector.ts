@@ -23,7 +23,6 @@
 import InspectorWidget = require("./InspectorWidget");
 import ArrayEditWidget = require("./ArrayEditWidget");
 import InspectorUtils = require("./InspectorUtils");
-import EditorEvents = require("editor/EditorEvents");
 
 class ModelInspector extends InspectorWidget {
 
@@ -31,7 +30,7 @@ class ModelInspector extends InspectorWidget {
 
         super();
 
-        this.subscribeToEvent(this, "WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(this, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 
@@ -46,6 +45,7 @@ class ModelInspector extends InspectorWidget {
         this.importer.scale = Number(this.scaleEdit.text);
 
         this.importer.importAnimations = this.importAnimationBox.value ? true : false;
+        this.importer.setImportMaterials(this.importMaterials.value ? true : false);
 
         for (var i = 0; i < this.importer.animationCount; i++) {
 
@@ -92,16 +92,19 @@ class ModelInspector extends InspectorWidget {
         editField.text = asset.name;
 
         //This should preferably be onClick
-        editField.subscribeToEvent(editField, "UIWidgetFocusChanged", (ev: Atomic.UIWidgetFocusChangedEvent) => {
+        editField.subscribeToEvent(editField, Atomic.UIWidgetFocusChangedEvent((ev: Atomic.UIWidgetFocusChangedEvent) => {
 
             if (ev.widget == editField && editField.focus) {
-                this.sendEvent(EditorEvents.InspectorProjectReference, { "path": asset.getRelativePath() });
+                this.sendEvent(Editor.InspectorProjectReferenceEventData({ "path": asset.getRelativePath() }));
             }
 
-        });
+        }));
 
         this.scaleEdit = InspectorUtils.createAttrEditField("Scale", modelLayout);
         this.scaleEdit.text = this.importer.scale.toString();
+
+        this.importMaterials = this.createAttrCheckBox("Import Materials", modelLayout);
+        this.importMaterials.value = this.importer.getImportMaterials() ? 1 : 0;
 
         // Animations Section
         var animationLayout = this.createSection(rootLayout, "Animation", 1);
@@ -121,16 +124,17 @@ class ModelInspector extends InspectorWidget {
 
         animLayout.spacing = 4;
 
-        animLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION_GRAVITY;
-        animLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION_LEFT_TOP;
+        animLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+        animLayout.layoutPosition = Atomic.UI_LAYOUT_POSITION.UI_LAYOUT_POSITION_LEFT_TOP;
         animLayout.layoutParams = nlp;
-        animLayout.axis = Atomic.UI_AXIS_Y;
-        animLayout.gravity = Atomic.UI_GRAVITY_ALL;
+        animLayout.axis = Atomic.UI_AXIS.UI_AXIS_Y;
+        animLayout.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_ALL;
 
         animationLayout.addChild(animLayout);
 
         this.createAnimationEntries();
-
+        // Animation preview button
+        rootLayout.addChild(this.createPreviewAnimationButton(this.asset));
         // apply button
         rootLayout.addChild(this.createApplyButton());
 
@@ -192,6 +196,7 @@ class ModelInspector extends InspectorWidget {
 
     // animation
     importAnimationBox: Atomic.UICheckBox;
+    importMaterials: Atomic.UICheckBox;
     importAnimationArray: ArrayEditWidget;
     animationInfoLayout: Atomic.UILayout;
 

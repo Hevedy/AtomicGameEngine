@@ -32,6 +32,7 @@
 #include <Atomic/Core/ProcessUtils.h>
 #include <Atomic/Core/CoreEvents.h>
 #include <Atomic/IO/Log.h>
+#include <Atomic/IO/File.h>
 #include <Atomic/IO/FileSystem.h>
 
 #include <Atomic/Graphics/Graphics.h>
@@ -45,6 +46,7 @@
 
 #ifdef ATOMIC_PLATFORM_LINUX
 
+#include <locale>
 #include <X11/Xlib.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -52,17 +54,30 @@
 
 static int XErrorHandlerImpl(Display *display, XErrorEvent *event)
 {
+    if ( display && event )
+    {
+        char msg[132];
+        XGetErrorText(display, event->error_code, msg, sizeof(msg));
+        fprintf(stderr, "X11 Error %d (%s): request %d.%d \n",
+                        event->error_code, 
+                        msg, 
+                        event->request_code,
+                        event->minor_code );
+    }
     return 0;
 }
 
 static int XIOErrorHandlerImpl(Display *display)
 {
+    if ( display )
+      fprintf(stderr, "XIO Error on display %p, quitting.\n", (void*)display );
     return 0;
 }
 
 static void TerminationSignalHandler(int signatl)
 {
-
+    fprintf(stderr,"Received signal %d, quitting.\n", signatl );
+    exit(0);
 }
 
 #endif
@@ -124,7 +139,6 @@ WebBrowserHost::WebBrowserHost(Context* context) : Object (context)
 
 #endif
 
-
     // IMPORTANT: See flags being set in implementation of void WebAppBrowser::OnBeforeCommandLineProcessing
     // these include "--enable-media-stream", "--enable-usermedia-screen-capturing", "--off-screen-rendering-enabled", "--transparent-painting-enabled"
 
@@ -136,7 +150,31 @@ WebBrowserHost::WebBrowserHost(Context* context) : Object (context)
 #endif
 
     CefSettings settings;
-    settings.windowless_rendering_enabled = 1;
+    settings.windowless_rendering_enabled = 1;    
+
+    FileSystem* fs = GetSubsystem<FileSystem>();
+
+    // Set CEF log file to existing log folder if any avoid attempting to write
+    // to executable folder, which is likely not writeable
+
+    Log* log = GetSubsystem<Log>();
+    if (log && log->GetLogFile())
+    {
+        const File* logFile = log->GetLogFile();
+        String logPath = logFile->GetName ();
+        if (logPath.Length())
+        {
+            String pathName, fileName, ext;
+            SplitPath(logPath, pathName, fileName, ext);
+            if (pathName.Length())
+            {
+                pathName = AddTrailingSlash(pathName) + "CEF.log";
+                CefString(&settings.log_file).FromASCII(GetNativePath(pathName).CString());
+            }
+            
+        }
+        
+    }        
 
     // default background is white, add a setting
     // settings.background_color = 0;
@@ -150,8 +188,6 @@ WebBrowserHost::WebBrowserHost(Context* context) : Object (context)
     {
         CefString(&settings.user_agent).FromASCII(userAgent_.CString());
     }
-
-    FileSystem* fs = GetSubsystem<FileSystem>();
 
     String fullPath;
 
@@ -173,19 +209,30 @@ WebBrowserHost::WebBrowserHost(Context* context) : Object (context)
 
     d_ = new WebBrowserHostPrivate(this);
 
+#ifdef ATOMIC_PLATFORM_LINUX
+    // On Linux systems, CEF ignores the locale in CefSettings and sets it based on environment variables.
+    // On non-English systems this changes the decimal separator to a comma (e.g. with a German
+    // locale such as de-AT), which in turn breaks the cross-platform behavior of strtod() and sprintf().
+    std::locale oldLocale;
+#endif
+
     // If losing OSX system menu, it means we're calling this
     // before initializing graphics subsystem
     if (!CefInitialize(args, settings, d_->app_, nullptr))
     {
-        LOGERROR("CefInitialize - Error");
+        ATOMIC_LOGERROR("CefInitialize - Error");
     }
+
+#ifdef ATOMIC_PLATFORM_LINUX
+    std::locale::global(oldLocale);
+#endif
 
     RegisterWebSchemeHandlers(this);
 
     // Ensure cookie manager is created
     CefCookieManager::GetGlobalManager(nullptr);
 
-    SubscribeToEvent(E_UPDATE, HANDLER(WebBrowserHost, HandleUpdate));
+    SubscribeToEvent(E_UPDATE, ATOMIC_HANDLER(WebBrowserHost, HandleUpdate));
 
     instance_ = this;
 

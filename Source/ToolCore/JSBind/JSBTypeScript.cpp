@@ -30,6 +30,7 @@
 #include "JSBModule.h"
 #include "JSBFunction.h"
 #include "JSBTypeScript.h"
+#include "JSBEvent.h"
 
 namespace ToolCore
 {
@@ -81,7 +82,10 @@ String JSBTypeScript::GetScriptType(JSBFunctionType* ftype)
 
     if (ftype->type_->asVectorType())
     {
-        scriptType = "string[]";
+        if (ftype->type_->asVectorType()->isVariantVector_)
+            scriptType = "ScriptVector";
+        else
+            scriptType = "string[]";
     }
 
     return scriptType;
@@ -111,7 +115,7 @@ void JSBTypeScript::End()
 
 void JSBTypeScript::ExportFunction(JSBFunction* function)
 {
-    if (function->Skip())
+    if (function->Skip(BINDINGLANGUAGE_JAVASCRIPT))
         return;
 
     String scriptName = "constructor";
@@ -134,7 +138,7 @@ void JSBTypeScript::ExportFunction(JSBFunction* function)
 
     source_ += scriptName + "(";
 
-    Vector<JSBFunctionType*>& parameters = function->GetParameters();
+    const Vector<JSBFunctionType*>& parameters = function->GetParameters();
 
     for (unsigned i = 0; i < parameters.Size(); i++)
     {
@@ -146,6 +150,13 @@ void JSBTypeScript::ExportFunction(JSBFunction* function)
             continue;
 
         String name = ftype->name_;
+
+        if (function->HasMutatedReturn() && i == parameters.Size() - 1)
+        {
+            // TODO: would be great to type this as Vector<ScriptVariant> somehow
+            scriptType = "ScriptVector";
+            name = "outVector";
+        }
 
         // TS doesn't like arguments named arguments
         if (name == "arguments")
@@ -228,14 +239,24 @@ void JSBTypeScript::ExportModuleClasses(JSBModule* module)
 
             JSBFunctionType* ftype = NULL;
 
-            if (prop->getter_ && !prop->getter_->Skip())
+            bool isStatic = false;
+
+            if (prop->getter_ && !prop->getter_->Skip(BINDINGLANGUAGE_JAVASCRIPT))
             {
                 ftype = prop->getter_->GetReturnType();
+                isStatic = prop->getter_->IsStatic();
             }
-            else if (prop->setter_ && !prop->setter_->Skip())
+            else if (prop->setter_ && !prop->setter_->Skip(BINDINGLANGUAGE_JAVASCRIPT))
+            {
                 ftype = prop->setter_->GetParameters()[0];
+                isStatic = prop->setter_->IsStatic();
+            }
 
             if (!ftype)
+                continue;
+
+            // TODO: static properies not currently working with generated TS
+            if (isStatic)
                 continue;
 
             String scriptType = GetScriptType(ftype);
@@ -248,7 +269,7 @@ void JSBTypeScript::ExportModuleClasses(JSBModule* module)
         if (propertyNames.Size())
             source_ += "\n";
 
-        JSBFunction* constructor = klass->GetConstructor();
+        JSBFunction* constructor = klass->GetConstructor(BINDINGLANGUAGE_JAVASCRIPT);
         if (constructor)
         {
             ExportFunction(constructor);
@@ -262,7 +283,7 @@ void JSBTypeScript::ExportModuleClasses(JSBModule* module)
 
             JSBFunction* func = functions[j];
 
-            if (func->IsConstructor() || func->IsDestructor() || func->Skip())
+            if (func->IsConstructor() || func->IsDestructor() || func->Skip(BINDINGLANGUAGE_JAVASCRIPT))
                 continue;
 
             ExportFunction(func);
@@ -328,10 +349,8 @@ void JSBTypeScript::ExportModuleEnums(JSBModule* module)
     {
         JSBEnum* _enum = *enumIter;
 
-        // can't use a TS enum, so use a type alias
-
-        source_ += "\n   // enum " + _enum->GetName() + "\n";
-        source_ += "   export type " + _enum->GetName() + " = number;\n";
+        source_ += "   /** enum " + _enum->GetName() + "*/\n";
+        source_ += "   export enum " + _enum->GetName() + " {\n";
 
         HashMap<String, String>& values = _enum->GetValues();
 
@@ -341,15 +360,133 @@ void JSBTypeScript::ExportModuleEnums(JSBModule* module)
         {
             String name = (*valsIter).first_;
 
-            source_ += "   export var " + name + ": " +  _enum->GetName() + ";\n";
-
+            source_ += "       " + name;
             valsIter++;
+
+            if (valsIter != values.End())
+                source_ += ",";
+
+            source_ += "\n";
         }
-
+        source_ += "    }\n";
         source_ += "\n";
-
     }
 
+}
+
+
+void JSBTypeScript::ExportModuleEvents(JSBModule* module)
+{
+
+    String source;
+
+    const Vector<SharedPtr<JSBEvent>>& events = module->GetEvents();
+
+    for (unsigned i = 0; i < events.Size(); i++)
+    {
+        JSBEvent* event = events[i];
+        String scriptEventName = event->GetScriptEventName(BINDINGLANGUAGE_JAVASCRIPT);
+
+        // Write the event type
+        source += ToString("    /** Event type to use in calls requiring the event such as 'sendEvent'.  Event Type is: \"%s\" **/\n", event->GetEventName().CString());
+        source += ToString("    export var %sType : Atomic.EventType;\n\n", scriptEventName.CString());
+
+        // Write the event interface
+        source += ToString("    /** object returned in the callback for the %s event.**/\n", event->GetEventName().CString());
+        source += ToString("    export interface %s extends Atomic.EventData {\n", scriptEventName.CString());
+
+        // parameters
+
+        const Vector<JSBEvent::EventParam>& params = event->GetParameters();
+
+        for (unsigned j = 0; j < params.Size(); j++)
+        {
+            const JSBEvent::EventParam& p = params[j];
+
+            JSBClass* cls = JSBPackage::GetClassAllPackages(p.typeInfo_);
+
+            String typeName = p.typeInfo_;
+            String enumTypeName = p.enumTypeName_;
+
+            String paramName = p.paramName_;
+
+            //TODO: Is there a standard naming module that could handle this?
+            if (paramName == "GUID")
+                paramName = "guid";
+            else if (paramName == "RefID")
+                paramName = "refid"; // do nothing
+            else
+                paramName[0] = tolower(paramName[0]);
+
+            if (!cls)
+                typeName = typeName.ToLower();
+            else
+                typeName = cls->GetName();
+
+            bool mapped = false;
+
+            if (typeName == "int" || typeName == "float" || typeName == "unsigned" || typeName == "uint" || typeName == "double")
+            {
+                typeName = "number";
+                mapped = true;
+            } else if (typeName == "bool" || typeName == "boolean") {
+                typeName = "boolean";
+                mapped = true;
+            } else if (typeName == "string") {
+                mapped = true;
+            } else if (cls) {
+                typeName = ToString("%s.%s", cls->GetPackage()->GetName().CString(), typeName.CString());
+                mapped = true;
+            } else if (typeName == "enum") {
+                if (enumTypeName.Length())
+                    typeName = package_->GetName() + "." + enumTypeName;
+                else
+                    typeName = "number";
+
+                mapped = true;
+            }
+
+            if (p.comment_.Length())
+            {
+                source += ToString("        /** %s */\n", p.comment_.CString());
+            }
+
+            if (mapped == true) {
+                source += ToString("        %s : %s;\n", paramName.CString(), typeName.CString());
+            } else {
+                source += ToString("        /** Unmapped Native Type: %s */\n", p.typeInfo_.CString());
+                source += ToString("        %s : any;\n", paramName.CString());
+            }
+        }
+
+        source += "    }\n\n";
+
+        // Write the event function signature
+        if (event->GetEventComment().Length())
+        {
+            source += "    /**\n";
+            source += ToString("     Wrapper function to generate a properly formatted event handler to pass to 'subscribeToEvent' for the %s event. \n\n", event->GetEventName().CString());
+            source += ToString("     %s\n", event->GetEventComment().CString());
+            source += "    **/\n";
+        } else {
+            source += ToString("    /** Wrapper function to generate a properly formatted event handler to pass to 'subscribeToEvent' for the %s event. **/\n", event->GetEventName().CString());
+        }
+        source += ToString("    export function %s (callback : Atomic.EventCallback<%s>) : Atomic.EventMetaData;\n", scriptEventName.CString(), scriptEventName.CString());
+        source += "\n";
+
+        if (params.Size() > 0)
+        {
+            source += ToString("    /** Wrapper function to construct callback data to pass to 'sendEvent' for the %s event. **/ \n", event->GetEventName().CString());
+            source += ToString("    export function %sData (callbackData : %s) : Atomic.EventCallbackMetaData; \n", scriptEventName.CString(), scriptEventName.CString());
+        } else {
+            source += ToString("    /** Wrapper function to construct object to pass to 'sendEvent' for the %s event. **/ \n", event->GetEventName().CString());
+            source += ToString("    export function %sData () : Atomic.EventCallbackMetaData; \n", scriptEventName.CString());
+        }
+
+        source += "\n\n";
+
+    }
+    source_ += source;
 }
 
 void JSBTypeScript::WriteToFile(const String &path)
@@ -395,6 +532,7 @@ void JSBTypeScript::Emit(JSBPackage* package, const String& path)
         source_ += "// MODULE: " + modules[i]->GetName() + "\n";
         source_ += "//----------------------------------------------------\n\n";
         ExportModuleClasses(modules[i]);
+        ExportModuleEvents(modules[i]);
     }
 
 

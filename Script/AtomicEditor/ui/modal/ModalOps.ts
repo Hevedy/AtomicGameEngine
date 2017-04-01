@@ -27,11 +27,6 @@ import NewProject = require("./NewProject");
 import CreateProject = require("./CreateProject");
 
 import EULAWindow = require("./license/EULAWindow");
-import ActivationWindow = require("./license/ActivationWindow");
-import ActivationSuccessWindow = require("./license/ActivationSuccessWindow");
-import ManageLicense = require("./license/ManageLicense");
-import Pro3DWindow = require("./license/Pro3DWindow");
-import ProPlatformWindow = require("./license/ProPlatformWindow");
 
 import BuildWindow = require("./build/BuildWindow");
 import BuildOutput = require("./build/BuildOutput");
@@ -47,6 +42,8 @@ import ExtensionWindow = require("./ExtensionWindow");
 
 import ProjectTemplates = require("../../resources/ProjectTemplates");
 
+import NewBuildWindow = require("./info/NewBuildWindow");
+import AtomicNETWindow = require("./info/AtomicNETWindow");
 
 class ModalOps extends Atomic.ScriptObject {
 
@@ -56,13 +53,22 @@ class ModalOps extends Atomic.ScriptObject {
 
         this.dimmer = new Atomic.UIDimmer();
 
+        this.subscribeToEvent(Atomic.WindowClosedEvent((e) => {
+            if (e.window == this.opWindow) {
+                this.opWindow = null;
+                if (this.dimmer.parent) {
+                    this.dimmer.parent.removeChild(this.dimmer, false);
+                }
+            }
+        }));
+
     }
 
-    showCreateProject(projectTemplateDefinition: ProjectTemplates.ProjectTemplateDefinition) {
+    showCreateProject(projectTemplateDefinition: ProjectTemplates.ProjectTemplateDefinition, projectPath?: string) {
 
         if (this.show()) {
 
-            this.opWindow = new CreateProject(projectTemplateDefinition);
+            this.opWindow = new CreateProject(projectTemplateDefinition, projectPath);
 
         }
 
@@ -169,46 +175,15 @@ class ModalOps extends Atomic.ScriptObject {
 
     }
 
-    showActivationWindow() {
+    showNewBuildWindow(showCheck:boolean = true) {
 
         if (this.show()) {
 
-            this.opWindow = new ActivationWindow();
+            this.opWindow = new NewBuildWindow(showCheck);
 
         }
 
     }
-
-    showManageLicense() {
-
-        if (this.show()) {
-
-            this.opWindow = new ManageLicense();
-
-        }
-
-    }
-
-    showPro3DWindow() {
-
-        if (this.show()) {
-
-            this.opWindow = new Pro3DWindow();
-
-        }
-
-    }
-
-    showProPlatformWindow() {
-
-        if (this.show()) {
-
-            this.opWindow = new ProPlatformWindow();
-
-        }
-
-    }
-
 
     showAbout() {
 
@@ -257,17 +232,6 @@ class ModalOps extends Atomic.ScriptObject {
 
     }
 
-
-    showActivationSuccessWindow() {
-
-        if (this.show()) {
-
-            this.opWindow = new ActivationSuccessWindow();
-
-        }
-
-    }
-
     showSnapSettings() {
 
         // only show snap settings if we have a project loaded
@@ -282,24 +246,35 @@ class ModalOps extends Atomic.ScriptObject {
 
     }
 
-    // TODO: standardize  to same pattern as other modal windows
-    showError(windowText: string, message: string) {
-        var view = EditorUI.getView();
-        var window = new Atomic.UIMessageWindow(view, "modal_error");
-        window.show(windowText, message, Atomic.UI_MESSAGEWINDOW_SETTINGS_OK, true, 640, 360);
+    showAtomicNETWindow() {
+
+        if (this.show()) {
+
+            this.opWindow = new AtomicNETWindow();
+
+        }
+
     }
 
-    showExtensionWindow(windowText: string, uifilename: string, handleWidgetEventCB: (ev: Atomic.UIWidgetEvent) => void): Editor.Modal.ExtensionWindow {
-        if (this.show()) {
+    // TODO: standardize  to same pattern as other modal windows
+    showError(windowText: string, message: string):Atomic.UIMessageWindow {
+        var view = EditorUI.getView();
+        var window = new Atomic.UIMessageWindow(view, "modal_error");
+        window.show(windowText, message, Atomic.UI_MESSAGEWINDOW_SETTINGS.UI_MESSAGEWINDOW_SETTINGS_OK, true, 640, 360);
+        return window;
+    }
+
+    showExtensionWindow(windowText: string, uifilename: string, handleWidgetEventCB: (ev: Atomic.UIWidgetEvent) => void, modal: boolean = true): Editor.Modal.ExtensionWindow {
+        if (this.show(modal)) {
 
             this.opWindow = new ExtensionWindow(windowText, uifilename, handleWidgetEventCB);
             return this.opWindow;
         }
     }
 
-    private show(): boolean {
+    private show(modal:boolean = true): boolean {
 
-        if (this.dimmer.parent) {
+        if (modal && this.dimmer.parent) {
 
             console.log("WARNING: attempting to show modal while dimmer is active");
             return false;
@@ -314,7 +289,9 @@ class ModalOps extends Atomic.ScriptObject {
         }
 
         var view = EditorUI.getView();
-        view.addChild(this.dimmer);
+        if (modal) {
+            view.addChild(this.dimmer);
+        }
 
         return true;
 

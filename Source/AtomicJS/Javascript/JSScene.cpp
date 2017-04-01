@@ -45,6 +45,10 @@ static int Node_CreateJSComponent(duk_context* ctx)
 {
     String path = duk_require_string(ctx, 0);
 
+    if (Atomic::GetExtension(path).Empty()) {
+        path += ".js";
+    }
+
     bool hasArgs = false;
     int argIdx = -1;
     if (duk_get_top(ctx) > 1 && duk_is_object(ctx, 1))
@@ -61,12 +65,12 @@ static int Node_CreateJSComponent(duk_context* ctx)
 
     if (!file)
     {
-        LOGERRORF("Unable to load component file %s", path.CString());
+        ATOMIC_LOGERRORF("Unable to load component file %s", path.CString());
         duk_push_undefined(ctx);
         return 1;
     }
 
-    JSComponent* jsc = file->CreateJSComponent();
+    SharedPtr<JSComponent> jsc = file->CreateJSComponent();
 
     node->AddComponent(jsc, jsc->GetID(), LOCAL);
 
@@ -95,6 +99,8 @@ static int Node_GetJSComponent(duk_context* ctx)
     {
         JSComponent* component = components[i];
         if (component->MatchScriptName(path)) {
+            if(!component->IsInstanceInitialized())
+                component->InitInstance();
 
             js_push_class_object_instance(ctx, component, "Component");
             return 1;

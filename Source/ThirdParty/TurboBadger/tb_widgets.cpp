@@ -32,6 +32,27 @@ bool TBWidget::update_widget_states = true;
 bool TBWidget::update_skin_states = true;
 bool TBWidget::show_focus_state = false;
 
+static TBHashTableAutoDeleteOf<TBWidget::TOUCH_INFO> s_touch_info;
+
+TBWidget::TOUCH_INFO *TBWidget::GetTouchInfo(uint32 id)
+{
+    return s_touch_info.Get(id);
+}
+
+static TBWidget::TOUCH_INFO *NewTouchInfo(uint32 id)
+{
+    assert(!s_touch_info.Get(id));
+    TBWidget::TOUCH_INFO *ti = new TBWidget::TOUCH_INFO;
+    memset(ti, 0, sizeof(TBWidget::TOUCH_INFO));
+    s_touch_info.Add(id, ti);
+    return ti;
+}
+
+static void DeleteTouchInfo(uint32 id)
+{
+    s_touch_info.Delete(id);
+}
+
 // == TBLongClickTimer ==================================================================
 
 /** One shot timer for long click event */
@@ -66,6 +87,7 @@ TBWidget::PaintProps::PaintProps()
 TBWidget::TBWidget()
     : m_parent(nullptr)
     , m_opacity(1.f)
+    , m_disabledOpacity(-1.0f)
     , m_state(WIDGET_STATE_NONE)
     , m_gravity(WIDGET_GRAVITY_DEFAULT)
     , m_layout_params(nullptr)
@@ -88,12 +110,23 @@ TBWidget::~TBWidget()
     assert(!m_parent); ///< A widget must be removed from parent before deleted
     m_packed.is_dying = true;
 
+    // Unreference from pointer capture
     if (this == hovered_widget)
         hovered_widget = nullptr;
     if (this == captured_widget)
         captured_widget = nullptr;
     if (this == focused_widget)
         focused_widget = nullptr;
+
+    // Unreference from touch info
+    TBHashTableIteratorOf<TOUCH_INFO> it(&s_touch_info);
+    while (TOUCH_INFO *ti = it.GetNextContent())
+    {
+        if (this == ti->hovered_widget)
+            ti->hovered_widget = nullptr;
+        if (this == ti->captured_widget)
+            ti->captured_widget = nullptr;
+    }
 
     if (m_delegate)
         m_delegate->OnDelete();
@@ -259,6 +292,17 @@ void TBWidget::SetOpacity(float opacity)
     Invalidate();
 }
 
+void TBWidget::SetDisabledOpacity(float opacity)
+{
+    opacity = Clamp(opacity, -1.f, 1.f);
+    if (m_disabledOpacity == opacity)
+        return;
+    if (opacity == 0) // Invalidate after setting opacity 0 will do nothing.
+        Invalidate();
+    m_disabledOpacity = opacity;
+    Invalidate();
+}
+
 void TBWidget::SetVisibilility(WIDGET_VISIBILITY vis)
 {
     if (m_packed.visibility == vis)
@@ -347,7 +391,14 @@ void TBWidget::AddChildRelative(TBWidget *child, WIDGET_Z_REL z, TBWidget *refer
 
 void TBWidget::RemoveChild(TBWidget *child, WIDGET_INVOKE_INFO info)
 {
-    assert(child->m_parent);
+
+// ATOMIC BEGIN
+
+    // this was an assert(child->m_parent)
+    if (child->m_parent != this)
+        return;
+
+// ATOMIC END
 
     if (info == WIDGET_INVOKE_INFO_NORMAL)
     {
@@ -1064,7 +1115,7 @@ PreferredSize TBWidget::GetPreferredSize(const SizeConstraints &in_constraints)
     // Override the calculated ps with any specified layout parameter.
     if (m_layout_params)
     {
-#define LP_OVERRIDE(param)	if (m_layout_params->param != LayoutParams::UNSPECIFIED) \
+#define LP_OVERRIDE(param)  if (m_layout_params->param != LayoutParams::UNSPECIFIED) \
     m_cached_ps.param = m_layout_params->param;
         LP_OVERRIDE(min_w);
         LP_OVERRIDE(min_h);
@@ -1161,7 +1212,10 @@ float TBWidget::CalculateOpacityInternal(WIDGET_STATE state, TBSkinElement *skin
     if (skin_element)
         opacity *= skin_element->opacity;
     if (state & WIDGET_STATE_DISABLED)
-        opacity *= g_tb_skin->GetDefaultDisabledOpacity();
+        if (m_disabledOpacity < 0.0f)
+            opacity *= g_tb_skin->GetDefaultDisabledOpacity();
+        else
+            opacity *= m_disabledOpacity;
     return opacity;
 }
 
@@ -1294,7 +1348,7 @@ void TBWidget::StopLongClickTimer()
     m_long_click_timer = nullptr;
 }
 
-void TBWidget::InvokePointerDown(int x, int y, int click_count, MODIFIER_KEYS modifierkeys, bool touch, int touchId)
+bool TBWidget::InvokePointerDown(int x, int y, int click_count, MODIFIER_KEYS modifierkeys, bool touch, int touchId)
 {
     TBWidget* down_widget = GetWidgetAt(x, y, true);
     if (!captured_widget && down_widget && down_widget->needCapturing_)
@@ -1375,10 +1429,15 @@ void TBWidget::InvokePointerDown(int x, int y, int click_count, MODIFIER_KEYS mo
         TBWidgetEvent ev(EVENT_TYPE_POINTER_DOWN, x, y, touch, modifierkeys);
         ev.count = click_count;
         down_widget->InvokeEvent(ev);
+
+		// Return true when captured instead of InvokeEvent result. If a widget is
+		// hit is more interesting for callers than if the event was handled or not.
+        return true;
     }
+    return false;
 }
 
-void TBWidget::InvokePointerUp(int x, int y, MODIFIER_KEYS modifierkeys, bool touch, int touchId)
+bool TBWidget::InvokePointerUp(int x, int y, MODIFIER_KEYS modifierkeys, bool touch, int touchId)
 {
     //get down_widget before making handling captured_widget event to make sure that down_widget won't be changed
     TBWidget* down_widget = GetWidgetAt(x, y, true);
@@ -1393,12 +1452,24 @@ void TBWidget::InvokePointerUp(int x, int y, MODIFIER_KEYS modifierkeys, bool to
         TBWidgetEvent ev_up(EVENT_TYPE_POINTER_UP, x, y, touch, modifierkeys);
         TBWidgetEvent ev_click(EVENT_TYPE_CLICK, x, y, touch, modifierkeys);
         captured_widget->OnCaptureChanged(false);
+
+        // ATOMIC BEGIN
+
+        // Atomic's TurboBadger multitouch support is a hack, TurboBadger has since added better support
+        // https://github.com/AtomicGameEngine/AtomicGameEngine/issues/1206
+
         captured_widget->InvokeEvent(ev_up);
-        if (!cancel_click && captured_widget->GetHitStatus(x, y))
+
+        if (!cancel_click && captured_widget && captured_widget->GetHitStatus(x, y))
         {
-            captured_widget->InvokeEvent(ev_click);
+            if (captured_widget)
+                captured_widget->InvokeEvent(ev_click);
         }
-        captured_widget->ReleaseCapture();
+
+        if (captured_widget)
+            captured_widget->ReleaseCapture();
+
+        // ATOMIC END
     }
     //restore x and y coords, to use with down_widget
     x = ox;
@@ -1418,7 +1489,12 @@ void TBWidget::InvokePointerUp(int x, int y, MODIFIER_KEYS modifierkeys, bool to
         //ReleaseCapture
         down_widget->Invalidate();
         down_widget->InvalidateSkinStates();
+ 
+        // Return true when captured instead of InvokeEvent result. If a widget is
+        // hit is more interesting for callers than if the event was handled or not.
+       return true;
     }
+    return false;
 }
 
 void TBWidget::InvokeRightPointerDown(int x, int y, int click_count, MODIFIER_KEYS modifierkeys)
@@ -1558,6 +1634,98 @@ void TBWidget::HandlePanningOnMove(int x, int y)
         }
     }
 }
+
+void TBWidget::InvokePointerCancel()
+{
+    if (captured_widget)
+        captured_widget->ReleaseCapture();
+}
+
+bool TBWidget::InvokeTouchDown(int x, int y, uint32 id, int click_count, MODIFIER_KEYS modifierkeys)
+{
+    if (id == 0)
+        return InvokePointerDown(x, y, click_count, modifierkeys, true);
+
+    TOUCH_INFO *ti = NewTouchInfo(id);
+    if (!ti)
+        return false;
+
+    if (!ti->captured_widget)
+        ti->captured_widget = GetWidgetAt(x, y, true);
+    if (ti->captured_widget && !ti->captured_widget->GetState(WIDGET_STATE_DISABLED))
+        ti->hovered_widget = ti->captured_widget;
+
+    if (ti->captured_widget)
+    {
+        ti->captured_widget->ConvertFromRoot(x, y);
+        ti->move_widget_x = ti->down_widget_x = x;
+        ti->move_widget_y = ti->down_widget_y = y;
+        TBWidgetEvent ev(EVENT_TYPE_TOUCH_DOWN, x, y, true, modifierkeys);
+        ev.count = click_count;
+        ev.ref_id = id;
+        ti->captured_widget->InvokeEvent(ev);
+        return true;
+    }
+    return false;
+}
+
+bool TBWidget::InvokeTouchUp(int x, int y, uint32 id, MODIFIER_KEYS modifierkeys)
+{
+    if (id == 0)
+        return InvokePointerUp(x, y, modifierkeys, true);
+    TOUCH_INFO *ti = GetTouchInfo(id);
+    if (ti && ti->captured_widget)
+    {
+        ti->captured_widget->ConvertFromRoot(x, y);
+        TBWidgetEvent ev(EVENT_TYPE_TOUCH_UP, x, y, true, modifierkeys);
+        ev.ref_id = id;
+        ti->captured_widget->InvokeEvent(ev);
+        DeleteTouchInfo(id);
+        return true;
+    }
+    return false;
+}
+
+void TBWidget::InvokeTouchMove(int x, int y, uint32 id, MODIFIER_KEYS modifierkeys)
+{
+    if (id == 0)
+        return InvokePointerMove(x, y, modifierkeys, true);
+
+    TOUCH_INFO *ti = GetTouchInfo(id);
+    if (!ti)
+        return;
+
+    ti->hovered_widget = GetWidgetAt(x, y, true);
+    if (ti->captured_widget)
+    {
+        ti->captured_widget->ConvertFromRoot(x, y);
+        ti->move_widget_x = x;
+        ti->move_widget_y = y;
+        TBWidgetEvent ev(EVENT_TYPE_TOUCH_MOVE, x, y, true, modifierkeys);
+        ev.ref_id = id;
+        if (ti->captured_widget->InvokeEvent(ev))
+            return;
+    }
+}
+
+void TBWidget::InvokeTouchCancel(uint32 id)
+{
+    if (id == 0)
+        return InvokePointerCancel();
+
+    TOUCH_INFO *ti = GetTouchInfo(id);
+    if (ti)
+    {
+        if (ti->captured_widget)
+        {
+            TBWidgetEvent ev(EVENT_TYPE_TOUCH_CANCEL, 0, 0, true);
+            ev.ref_id = id;
+            ti->captured_widget->InvokeEvent(ev);
+        }
+        DeleteTouchInfo(id);
+    }
+}
+
 
 void TBWidget::InvokeWheel(int x, int y, int delta_x, int delta_y, MODIFIER_KEYS modifierkeys)
 {

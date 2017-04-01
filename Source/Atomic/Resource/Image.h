@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -53,6 +53,7 @@ struct CompressedLevel
     /// Construct empty.
     CompressedLevel() :
         data_(0),
+        format_(CF_NONE),
         width_(0),
         height_(0),
         depth_(0),
@@ -89,7 +90,7 @@ struct CompressedLevel
 /// %Image resource.
 class ATOMIC_API Image : public Resource
 {
-    OBJECT(Image);
+    ATOMIC_OBJECT(Image, Resource);
 
 public:
     /// Construct empty.
@@ -138,18 +139,12 @@ public:
     bool SaveTGA(const String& fileName) const;
     /// Save in JPG format with compression quality. Return true if successful.
     bool SaveJPG(const String& fileName, int quality) const;
-    /// Save in DDS format. Return true if successful.
-    bool SaveDDS(const String& fileName) const;
     /// Whether this texture is detected as a cubemap, only relevant for DDS.
     bool IsCubemap() const { return cubemap_; }
     /// Whether this texture has been detected as a volume, only relevant for DDS.
     bool IsArray() const { return array_; }
     /// Whether this texture is in sRGB, only relevant for DDS.
     bool IsSRGB() const { return sRGB_; }
-    /// Whether this texture has power of two dimensions
-    bool IsPOT() const;
-    /// Whether this texture has an alpha channel
-    bool HasAlphaChannel() const;
 
     /// Return a 2D pixel color.
     Color GetPixel(int x, int y) const;
@@ -185,10 +180,10 @@ public:
     /// Return compressed format.
     CompressedFormat GetCompressedFormat() const { return compressedFormat_; }
 
-    /// Return number of compressed mip levels.
+    /// Return number of compressed mip levels. Returns 0 if the image is has not been loaded from a source file containing multiple mip levels.
     unsigned GetNumCompressedLevels() const { return numCompressedLevels_; }
 
-    /// Return next mip level by bilinear filtering.
+    /// Return next mip level by bilinear filtering. Note that if the image is already 1x1x1, will keep returning an image of that size.
     SharedPtr<Image> GetNextLevel() const;
     /// Return the next sibling image of an array or cubemap.
     SharedPtr<Image> GetNextSibling() const { return nextSibling_;  }
@@ -198,12 +193,24 @@ public:
     CompressedLevel GetCompressedLevel(unsigned index) const;
     /// Return subimage from the image by the defined rect or null if failed. 3D images are not supported. You must free the subimage yourself.
     Image* GetSubimage(const IntRect& rect) const;
-    /// Copy contents of the image into the defined rect, scaling if necessary. This image should already be large enough to include the rect. Compressed and 3D images are not supported.
-    bool SetSubimage(const Image* image, const IntRect& rect);
     /// Return an SDL surface from the image, or null if failed. Only RGB images are supported. Specify rect to only return partial image. You must free the surface yourself.
     SDL_Surface* GetSDLSurface(const IntRect& rect = IntRect::ZERO) const;
     /// Precalculate the mip levels. Used by asynchronous texture loading.
     void PrecalculateLevels();
+
+    // ATOMIC BEGIN
+    /// Whether this texture has an alpha channel
+    bool HasAlphaChannel() const;
+    bool SaveDDS(const String& fileName) const;
+    /// Copy contents of the image into the defined rect, scaling if necessary. This image should already be large enough to include the rect. Compressed and 3D images are not supported.
+    bool SetSubimage(const Image* image, const IntRect& rect);
+    // ATOMIC END
+    /// Clean up the mip levels.
+    void CleanupLevels();
+    /// Get all stored mip levels starting from this.
+    void GetLevels(PODVector<Image*>& levels);
+    /// Get all stored mip levels starting from this.
+    void GetLevels(PODVector<const Image*>& levels) const;
 
 private:
     /// Decode an image using stb_image.

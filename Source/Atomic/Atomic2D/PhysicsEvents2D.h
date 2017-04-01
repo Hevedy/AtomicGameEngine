@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,41 +24,51 @@
 
 #include "../Core/Object.h"
 
+// For prestep / poststep events, which are the same for 2D and 3D physics. The events themselves don't depend
+// on whether 3D physics support or Bullet has been compiled in.
+#include "../Physics/PhysicsEvents.h"
+
 namespace Atomic
 {
 
-/// Physics world is about to be stepped.
-EVENT(E_PHYSICSPRESTEP2D, PhysicsPreStep2D)
+/// Physics begin contact. Global event sent by PhysicsWorld2D.
+ATOMIC_EVENT(E_PHYSICSBEGINCONTACT2D, PhysicsBeginContact2D)
 {
-    PARAM(P_WORLD, World);                  // PhysicsWorld2D pointer
-    PARAM(P_TIMESTEP, TimeStep);            // float
+    ATOMIC_PARAM(P_WORLD, World);                  // PhysicsWorld2D pointer
+    ATOMIC_PARAM(P_BODYA, BodyA);                  // RigidBody2D pointer
+    ATOMIC_PARAM(P_BODYB, BodyB);                  // RigidBody2D pointer
+    ATOMIC_PARAM(P_NODEA, NodeA);                  // Node pointer
+    ATOMIC_PARAM(P_NODEB, NodeB);                  // Node pointer
+    ATOMIC_PARAM(P_CONTACT, Contact);              // b2Contact pointer
 }
 
-/// Physics world has been stepped.
-EVENT(E_PHYSICSPOSTSTEP2D, PhysicsPostStep2D)
+/// Physics end contact. Global event sent by PhysicsWorld2D.
+ATOMIC_EVENT(E_PHYSICSENDCONTACT2D, PhysicsEndContact2D)
 {
-    PARAM(P_WORLD, World);                  // PhysicsWorld2D pointer
-    PARAM(P_TIMESTEP, TimeStep);            // float
+    ATOMIC_PARAM(P_WORLD, World);                  // PhysicsWorld2D pointer
+    ATOMIC_PARAM(P_BODYA, BodyA);                  // RigidBody2D pointer
+    ATOMIC_PARAM(P_BODYB, BodyB);                  // RigidBody2D pointer
+    ATOMIC_PARAM(P_NODEA, NodeA);                  // Node pointer
+    ATOMIC_PARAM(P_NODEB, NodeB);                  // Node pointer
+    ATOMIC_PARAM(P_CONTACT, Contact);              // b2Contact pointer
 }
 
-/// Physics begin contact.
-EVENT(E_PHYSICSBEGINCONTACT2D, PhysicsBeginContact2D)
+/// Node begin contact. Sent by scene nodes participating in a collision.
+ATOMIC_EVENT(E_NODEBEGINCONTACT2D, NodeBeginContact2D)
 {
-    PARAM(P_WORLD, World);                  // PhysicsWorld2D pointer
-    PARAM(P_BODYA, BodyA);                  // RigidBody2D pointer
-    PARAM(P_BODYB, BodyB);                  // RigidBody2D pointer
-    PARAM(P_NODEA, NodeA);                  // Node pointer
-    PARAM(P_NODEB, NodeB);                  // Node pointer
+    ATOMIC_PARAM(P_BODY, Body);                    // RigidBody2D pointer
+    ATOMIC_PARAM(P_OTHERNODE, OtherNode);          // Node pointer
+    ATOMIC_PARAM(P_OTHERBODY, OtherBody);          // RigidBody2D pointer
+    ATOMIC_PARAM(P_CONTACT, Contact);              // b2Contact pointer
 }
 
-/// Physics end contact.
-EVENT(E_PHYSICSENDCONTACT2D, PhysicsEndContact2D)
+/// Node end contact. Sent by scene nodes participating in a collision.
+ATOMIC_EVENT(E_NODEENDCONTACT2D, NodeEndContact2D)
 {
-    PARAM(P_WORLD, World);                  // PhysicsWorld2D pointer
-    PARAM(P_BODYA, BodyA);                  // RigidBody2D pointer
-    PARAM(P_BODYB, BodyB);                  // RigidBody2D pointer
-    PARAM(P_NODEA, NodeA);                  // Node pointer
-    PARAM(P_NODEB, NodeB);                  // Node pointer
+    ATOMIC_PARAM(P_BODY, Body);                    // RigidBody2D pointer
+    ATOMIC_PARAM(P_OTHERNODE, OtherNode);          // Node pointer
+    ATOMIC_PARAM(P_OTHERBODY, OtherBody);          // RigidBody2D pointer
+    ATOMIC_PARAM(P_CONTACT, Contact);              // b2Contact pointer
 }
 
 }

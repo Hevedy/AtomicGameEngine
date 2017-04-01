@@ -31,16 +31,18 @@ namespace ToolCore
 
 class EditCmd: public Command
 {
-    OBJECT(EditCmd);
+    ATOMIC_OBJECT(EditCmd, Command);
 
 public:
 
     EditCmd(Context* context);
-    virtual ~EditCmd();
-
-    bool Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg);
+    virtual ~EditCmd();    
 
     void Run();
+
+protected:
+
+    bool ParseInternal(const Vector<String>& arguments, unsigned startIndex, String& errorMsg);
 
 private:
 

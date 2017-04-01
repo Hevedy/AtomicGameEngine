@@ -20,7 +20,6 @@
 // THE SOFTWARE.
 //
 
-import EditorEvents = require("editor/EditorEvents");
 import EditorUI = require("ui/EditorUI");
 import ModalWindow = require("../ModalWindow");
 import ProgressModal = require("../ProgressModal");
@@ -30,6 +29,7 @@ import MacSettingsWidget = require("./platforms/MacSettingsWidget");
 import AndroidSettingsWidget = require("./platforms/AndroidSettingsWidget");
 import IOSSettingsWidget = require("./platforms/IOSSettingsWidget");
 import WebSettingsWidget = require("./platforms/WebSettingsWidget");
+import LinuxSettingsWidget = require("./platforms/LinuxSettingsWidget");
 
 export interface BuildSettingsWidget {
 
@@ -58,17 +58,19 @@ export class BuildSettingsWindow extends ModalWindow {
         platformSource.addItem(new Atomic.UISelectItem("Android", "AndroidBuildSettings", "LogoAndroid"));
         platformSource.addItem(new Atomic.UISelectItem("iOS", "iOSBuildSettings", "LogoIOS"));
         platformSource.addItem(new Atomic.UISelectItem("WebGL", "WebGLBuildSettings", "LogoHTML5"));
+        platformSource.addItem(new Atomic.UISelectItem("Linux", "LinuxBuildSettings", "LogoLinux"));
 
         platformSelect.setSource(platformSource);
 
         var lp = new Atomic.UILayoutParams();
 
+        var myh = 74 * platformSource.getItemCount(); // 74 pixels per platform icon
         lp.minWidth = 160;
-        lp.minHeight = 370;
-        lp.maxHeight = 370;
+        lp.minHeight = myh;
+        lp.maxHeight = myh;
 
         platformSelect.layoutParams = lp;
-        platformSelect.gravity = Atomic.UI_GRAVITY_ALL;
+        platformSelect.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_ALL;
 
         platformcontainer.addChild(platformSelect);
 
@@ -77,6 +79,7 @@ export class BuildSettingsWindow extends ModalWindow {
         this.addPlatformWidget("ANDROID", new AndroidSettingsWidget(), "LogoAndroid", 2);
         this.addPlatformWidget("IOS", new IOSSettingsWidget(), "LogoIOS", 3);
         this.addPlatformWidget("WEB", new WebSettingsWidget(), "LogoHTML5", 4);
+        this.addPlatformWidget("LINUX", new LinuxSettingsWidget(), "LogoLinux", 5);
 
         var currentPlatform = ToolCore.toolSystem.currentPlatform;
         this.setDisplayPlatform(currentPlatform);
@@ -86,13 +89,13 @@ export class BuildSettingsWindow extends ModalWindow {
         this.resizeToFitContent();
         this.center();
 
-        this.subscribeToEvent("PlatformChanged", (ev: ToolCore.PlatformChangedEvent) => {
+        this.subscribeToEvent(ToolCore.PlatformChangedEvent((ev: ToolCore.PlatformChangedEvent) => {
 
             this.platformIndicator.skinBg = this.platformInfo[ev.platform.name].logo;
 
-        });
+        }));
 
-        this.subscribeToEvent(this, "WidgetEvent", (ev) => this.handleWidgetEvent(ev));
+        this.subscribeToEvent(this, Atomic.UIWidgetEvent((ev) => this.handleWidgetEvent(ev)));
     }
 
     commitBuildSettings() {
@@ -109,7 +112,7 @@ export class BuildSettingsWindow extends ModalWindow {
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent): boolean {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             var toolSystem = ToolCore.toolSystem;
 
@@ -138,6 +141,11 @@ export class BuildSettingsWindow extends ModalWindow {
 
                 var index = this.platformSelect.value;
 
+                var showMessage = function(target, title, message) {
+                    var window = new Atomic.UIMessageWindow(target, "modal_error");
+                    window.show(title, message, Atomic.UI_MESSAGEWINDOW_SETTINGS.UI_MESSAGEWINDOW_SETTINGS_OK, true, 640, 260);
+                };
+
                 for (var name in this.platformInfo) {
 
                     var info: { widget: Atomic.UIWidget, index: number, logo: string } = this.platformInfo[name];
@@ -146,23 +154,41 @@ export class BuildSettingsWindow extends ModalWindow {
 
                         var platform = toolSystem.getPlatformByName(name);
 
-                        if (platform.platformID == ToolCore.PLATFORMID_IOS) {
+                        // Do we have a C# project?
+                        if (ToolCore.netProjectSystem.solutionAvailable) {
 
-                            if (Atomic.platform == "Windows") {
+                            if (platform.platformID == ToolCore.PlatformID.PLATFORMID_WEB) {
 
-                                var message = "\niOS Deployment requires running the Atomic Editor on MacOSX\n\n";
-                                new Atomic.UIMessageWindow(this, "modal_error").show("MacOSX Required", message, Atomic.UI_MESSAGEWINDOW_SETTINGS_OK, true, 640, 260);
+                                showMessage(this, "Platform Info", "\nThe web platform is not available when using C# at this time\n\n");
                                 return true;
+
+                            }
+
+                            if (platform.platformID == ToolCore.PlatformID.PLATFORMID_IOS || platform.platformID == ToolCore.PlatformID.PLATFORMID_ANDROID) {
+
+                                var ide = Atomic.platform == "Windows" ? "Visual Studio" : "Xamarin Studio";
+                                var message = `Please open the following solution in ${ide}:\n\n ${ToolCore.netProjectSystem.solutionPath}\n\n`;
+                                message += "HINT: You can open the solution by clicking on any C# script in the project or from the Developer->Plugins->AtomicNET menu\n";
+                                showMessage(this, "IDE Deployment Required", message);
+                                return true;
+                            }
+
+
+                        } else {
+
+                            if (platform.platformID == ToolCore.PlatformID.PLATFORMID_IOS) {
+
+                                if (Atomic.platform == "Windows") {
+
+                                    showMessage(this, "MacOSX Required", "\niOS Deployment requires running the Atomic Editor on MacOSX\n\n");
+                                    return true;
+
+                                }
 
                             }
 
                         }
 
-                        if (!platform.license) {
-                            this.hide();
-                            EditorUI.getModelOps().showProPlatformWindow();
-                            return true;
-                        }
 
                         toolSystem.setCurrentPlatform(platform.platformID);
 
@@ -194,6 +220,10 @@ export class BuildSettingsWindow extends ModalWindow {
                 this.setDisplayPlatform(toolSystem.getPlatformByName("WEB"));
                 return true;
             }
+            if (ev.refid == "LinuxBuildSettings") {
+                this.setDisplayPlatform(toolSystem.getPlatformByName("LINUX"));
+                return true;
+            }
 
         }
 
@@ -213,14 +243,14 @@ export class BuildSettingsWindow extends ModalWindow {
 
         for (var name in this.platformInfo) {
 
-            this.platformInfo[name].widget.visibility = Atomic.UI_WIDGET_VISIBILITY_GONE;
+            this.platformInfo[name].widget.visibility = Atomic.UI_WIDGET_VISIBILITY.UI_WIDGET_VISIBILITY_GONE;
 
         }
 
         if (!platform) return;
 
         var info: { widget: Atomic.UIWidget, index: number, logo: string } = this.platformInfo[platform.name];
-        info.widget.visibility = Atomic.UI_WIDGET_VISIBILITY_VISIBLE;
+        info.widget.visibility = Atomic.UI_WIDGET_VISIBILITY.UI_WIDGET_VISIBILITY_VISIBLE;
         if (this.platformSelect.value != info.index)
             this.platformSelect.value = info.index;
 

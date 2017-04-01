@@ -32,126 +32,230 @@ using namespace Atomic;
 namespace ToolCore
 {
 
-class NETProjectGen;
+    class ProjectSettings;
+    class NETProjectGen;
 
-class NETProjectBase : public Object
-{
-    OBJECT(NETProjectBase);
+    class NETProjectBase : public Object
+    {
+        ATOMIC_OBJECT(NETProjectBase, Object)
 
-public:
+    public:
 
-    NETProjectBase(Context* context, NETProjectGen* projectGen);
-    virtual ~NETProjectBase();
+        NETProjectBase(Context* context, NETProjectGen* projectGen);
+        virtual ~NETProjectBase();
 
-    void ReplacePathStrings(String& path);
+        void ReplacePathStrings(String& path) const;
 
-protected:
+        void CopyXMLElementRecursive(XMLElement source, XMLElement dest);
 
-    SharedPtr<XMLFile> xmlFile_;
-    WeakPtr<NETProjectGen> projectGen_;
+    protected:
 
-};
+        SharedPtr<XMLFile> xmlFile_;
+        WeakPtr<NETProjectGen> projectGen_;
 
-class NETCSProject : public NETProjectBase
-{
-    OBJECT(NETCSProject);
+    };
 
-public:
+    class NETCSProject : public NETProjectBase
+    {
+        friend class NETSolution;
 
-    NETCSProject(Context* context, NETProjectGen* projectGen);
-    virtual ~NETCSProject();
+        ATOMIC_OBJECT(NETCSProject, NETProjectBase)
 
-    bool Load(const JSONValue& root);
+    public:
 
-    const String& GetName() { return name_; }
-    const String& GetProjectGUID() { return projectGuid_; }
+        NETCSProject(Context* context, NETProjectGen* projectGen);
+        virtual ~NETCSProject();
 
-    bool Generate();
+        bool Load(const JSONValue& root);
 
-private:
+        const String& GetName() { return name_; }
+        const String& GetProjectGUID() { return projectGuid_; }
 
-    void CreateCompileItemGroup(XMLElement &projectRoot);
-    void CreateReferencesItemGroup(XMLElement &projectRoot);
-    void CreateMainPropertyGroup(XMLElement &projectRoot);
-    void CreateDebugPropertyGroup(XMLElement &projectRoot);
-    void CreateReleasePropertyGroup(XMLElement &projectRoot);
-    void GetAssemblySearchPaths(String& paths);
+        const Vector<String>& GetReferences() const { return references_; }
+        const Vector<String>& GetPackages() const { return packages_; }
 
-    String name_;
-    String projectGuid_;
-    String outputType_;
-    String rootNamespace_;
-    String assemblyName_;
-    String assemblyOutputPath_;
-    String assemblySearchPaths_;
+        bool GetIsPCL() const { return projectTypeGuids_.Contains("{786C830F-07A1-408B-BD7F-6EE04809D6DB}"); }
 
-    XMLElement xmlRoot_;
+        bool GetIsPlayerApp() const { return playerApplication_; }
+        bool SupportsDesktop() const;
+        bool SupportsPlatform(const String& platform, bool explicitCheck = true) const;
 
-    Vector<String> references_;
-    Vector<String> sourceFolders_;
-};
+        /// Returns true if this project is part of core AtomicNET
+        bool GetAtomicNETProject() const { return atomicNETProject_;  }
 
-class NETSolution : public NETProjectBase
-{
-    OBJECT(NETSolution);
+        bool Generate();
 
-public:
+    private:
 
-    NETSolution(Context* context, NETProjectGen* projectGen);
-    virtual ~NETSolution();
+        /// Returns true if this project is part of core AtomicNET
+        void SetAtomicNETProject(bool value) { atomicNETProject_ = value; }
 
-    bool Load(const JSONValue& root);
+        // Portable Class Library
+        bool GenerateShared();
 
-    bool Generate();
+        bool GenerateStandard();
 
-    const String& GetOutputPath() { return outputPath_; }
+        bool GetRelativeProjectPath(const String& fromPath, const String& toPath, String& output) const;
 
-private:
+        bool CreateProjectFolder(const String& path);
 
-    void GenerateXamarinStudio(const String& slnPath);
+        void CreateCompileItemGroup(XMLElement &projectRoot);
+        void CreateReferencesItemGroup(XMLElement &projectRoot);
+        void CreatePackagesItemGroup(XMLElement &projectRoot);
+        void CreateMainPropertyGroup(XMLElement &projectRoot);
+        void CreateDebugPropertyGroup(XMLElement &projectRoot);
+        void CreateReleasePropertyGroup(XMLElement &projectRoot);
 
-    String name_;
-    String outputPath_;
+        void CreateApplicationItems(XMLElement &projectRoot);
+        void CreateAndroidItems(XMLElement &projectRoot);
+        void CreateIOSItems(XMLElement &projectRoot);
 
-};
+        void CreateAssemblyInfo();
+        void GetAssemblySearchPaths(String& paths);
 
-class NETProjectGen : public Object
-{
-    OBJECT(NETProjectGen);
+        void ProcessDefineConstants(StringVector& constants);
 
-public:
+        /// Return a relative path to the output folder, config can be Release/Debug/Lib
+        String GetRelativeOutputPath(const String& config) const;
 
-    NETProjectGen(Context* context);
-    virtual ~NETProjectGen();
+        String name_;
+        String projectGuid_;
+        String outputType_;
+        String rootNamespace_;
+        String assemblyName_;
+        String assemblyOutputPath_;
+        String assemblySearchPaths_;
+        bool atomicNETProject_;
 
-    const String& GetScriptPlatform() { return scriptPlatform_; }
+        // project paths
+        String projectPath_;
 
-    NETSolution* GetSolution() { return solution_; }
+        XMLElement xmlRoot_;
 
-    bool GetMonoBuild() { return monoBuild_; }
-    bool GetGameBuild() { return gameBuild_; }
+        Vector<String> platforms_;
+        Vector<String> references_;
+        Vector<String> packages_;
+        Vector<String> sourceFolders_;
 
-    const Vector<SharedPtr<NETCSProject>>& GetCSProjects() { return projects_; }
+        Vector<String> defineConstants_;
 
-    void SetScriptPlatform(const String& platform) { scriptPlatform_ = platform; }
+        Vector<String> projectTypeGuids_;
+        Vector<String> importProjects_;
+        Vector<String> libraryProjectZips_;
+        Vector<String> transformFiles_;
 
-    bool Generate();
+        String targetFrameworkProfile_;
+        Vector<String> sharedReferences_;
 
-    String GenerateUUID();
+        bool genAssemblyDocFile_;
 
-    bool LoadProject(const JSONValue& root, bool gameBuild = false);
-    bool LoadProject(const String& projectPath, bool gameBuild = false);
+        bool playerApplication_;
 
-private:
+        // Android
+        bool androidApplication_;
 
-    String scriptPlatform_;
+        // iOS
+        String objcBindingApiDefinition_;
+        String codesignEntitlements_;
+        String infoPList_;
 
-    bool monoBuild_;
-    bool gameBuild_;
+        
+    };
 
-    SharedPtr<NETSolution> solution_;
-    Vector<SharedPtr<NETCSProject>> projects_;
+    class NETSolution : public NETProjectBase
+    {
+        ATOMIC_OBJECT(NETSolution, NETProjectBase)
 
-};
+    public:
+
+        NETSolution(Context* context, NETProjectGen* projectGen, bool rewrite = false);
+        virtual ~NETSolution();
+
+        bool Load(const JSONValue& root);
+
+        bool Generate();
+
+        const String& GetOutputPath() { return outputPath_; }
+        String GetOutputFilename() { return outputPath_ + name_ + ".sln"; }
+
+        Vector<String>& GetPackages() { return packages_;  }
+
+        // Registers a NuGet package, returns true if the package hasn't been previously registered
+        bool RegisterPackage(const String& package);
+
+        /// If true, the sln file will rewritten if it exists, default is false
+        void SetRewriteSolution(bool rewrite) { rewriteSolution_ = rewrite; }
+
+
+    private:
+
+        void GenerateSolution(const String& slnPath);
+
+        String name_;
+        String outputPath_;
+        String solutionGUID_;
+        Vector<String> packages_;
+        bool rewriteSolution_;
+
+    };
+
+    class NETProjectGen : public Object
+    {
+        ATOMIC_OBJECT(NETProjectGen, Object)
+
+    public:
+
+        NETProjectGen(Context* context);
+        virtual ~NETProjectGen();
+
+        NETSolution* GetSolution() { return solution_; }
+
+        const Vector<SharedPtr<NETCSProject>>& GetCSProjects() { return projects_; }
+
+        NETCSProject* GetCSProjectByName(const String& name);
+
+        bool GetCSProjectDependencies(NETCSProject * source, PODVector<NETCSProject*>& depends) const;
+
+        const String& GetAtomicProjectPath() const { return atomicProjectPath_; }
+
+        bool Generate();
+
+        /// Returns true if the generated solution requires NuGet
+        bool GetRequiresNuGet();
+
+        String GenerateUUID();
+
+        /// If true, the sln file will rewritten if it exists, default is false
+        void SetRewriteSolution(bool rewrite);
+
+        bool LoadJSONProject(const String& jsonProjectPath);
+        bool LoadAtomicProject(const String& atomicProjectPath);
+
+        void AddGlobalDefineConstant(const String& constant) { globalDefineConstants_.Push(constant); }
+        const Vector<String>& GetGlobalDefineConstants() const { return globalDefineConstants_; }
+
+        void SetSupportedPlatforms(const StringVector& platforms);
+        bool GetSupportsPlatform(const String& platform) const;
+
+        ProjectSettings* GetProjectSettings() { return projectSettings_; }
+
+    private:
+
+        bool LoadProject(const JSONValue& root);
+
+        /// Returns true if a project is included on the specifed platform
+        bool IncludeProjectOnPlatform(const JSONValue& projectRoot, const String& platform);
+
+        // if true, the solution (sln) file will be recreated if it exists
+        bool rewriteSolution_;
+
+        String atomicProjectPath_;
+        SharedPtr<NETSolution> solution_;
+        Vector<String> globalDefineConstants_;
+        Vector<SharedPtr<NETCSProject>> projects_;
+
+        SharedPtr<ProjectSettings> projectSettings_;
+
+    };
 
 }

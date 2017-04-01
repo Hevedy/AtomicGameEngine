@@ -36,7 +36,7 @@ class Project;
 
 class ToolSystem : public Object
 {
-    OBJECT(ToolSystem);
+    ATOMIC_OBJECT(ToolSystem, Object);
 
 public:
 
@@ -47,9 +47,6 @@ public:
     Project* GetProject() { return project_; }
     void CloseProject();
 
-    const String& GetDataPath() { return dataPath_; }
-    void SetDataPath(const String& path) { dataPath_ = path; }
-
     // Platforms
     void RegisterPlatform(Platform* platform);
     Platform* GetPlatformByID(PlatformID platform);
@@ -58,13 +55,9 @@ public:
     void SetCurrentPlatform(PlatformID platform);
     Platform* GetCurrentPlatform();
 
-    void SetCLI() { cli_ = true; }
-    bool IsCLI() { return cli_; }
-
 private:
 
-    /// Full path to data files
-    String dataPath_;
+    void HandleUpdate(StringHash eventType, VariantMap& eventData);
 
     SharedPtr<Platform> currentPlatform_;
 
@@ -73,7 +66,7 @@ private:
 
     SharedPtr<Project> project_;
 
-    bool cli_;
+    float updateDelta_;
 
 };
 

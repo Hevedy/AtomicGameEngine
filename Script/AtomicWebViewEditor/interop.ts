@@ -37,27 +37,35 @@ const DEBUG_ALERT = false;
 
 /**
  * Promise version of atomic query
- * @param  {string} message the query to use to pass to atomicQuery.  If there is no payload, this will be passed directly, otherwise it will be passed in a data object
- * @param  {any} payload optional data to send
+ * @param  {string} messageType the message type to pass to atomicQuery.  If there is no payload, this will be passed directly, otherwise it will be passed in a data object
+ * @param  {any} data optional data to send
  * @return {Promise}
  */
-function atomicQueryPromise(message: any): Promise<{}> {
+window.atomicQueryPromise = function(messageType: string, data?: {}): Promise<{}> {
     return new Promise(function(resolve, reject) {
-        let queryMessage = message;
 
-        // if message is coming in as an object then let's stringify it
-        if (typeof (message) != "string") {
-            queryMessage = JSON.stringify(message);
+        let queryMessage;
+
+        // if we have a data element, then we need to structure the message so that the host understands it
+        // by adding the message to the object and then stringify-ing the whole thing
+        if (data) {
+            // stringify and reparse since we need to modify the data, but don't want to modify the passed in object
+            queryMessage = JSON.parse(JSON.stringify(data));
+            queryMessage.message = messageType;
+        } else {
+            queryMessage = {
+                message: messageType
+            };
         }
 
         window.atomicQuery({
-            request: queryMessage,
+            request: JSON.stringify(queryMessage),
             persistent: false,
             onSuccess: resolve,
             onFailure: (error_code, error_message) => reject({ error_code: error_code, error_message: error_message })
         });
     });
-}
+};
 
 export default class HostInteropType {
 
@@ -78,6 +86,11 @@ export default class HostInteropType {
     static EDITOR_CHANGE = "editorChange";
     static EDITOR_GET_USER_PREFS = "editorGetUserPrefs";
 
+    private setCodeLoaded;
+    private editorReady = new Promise((resolve, reject) => {
+        this.setCodeLoaded = resolve;
+    });
+
     /**
      * Called from the host to notify the client what file to load
      * @param  {string} codeUrl
@@ -96,9 +109,9 @@ export default class HostInteropType {
         // get the code
         this.getResource(codeUrl).then((src: string) => {
             editorCommands.loadCodeIntoEditor(src, filename, fileExt);
-            atomicQueryPromise({
-                message: HostInteropType.EDITOR_GET_USER_PREFS
-            });
+            return window.atomicQueryPromise(HostInteropType.EDITOR_GET_USER_PREFS);
+        }).then(() => {
+            this.setCodeLoaded();
         }).catch((e: Editor.ClientExtensions.AtomicErrorMessage) => {
             console.log("Error loading code: " + e.error_message);
         });
@@ -110,8 +123,7 @@ export default class HostInteropType {
      */
     saveCode(): Promise<any> {
         let source = editorCommands.getSourceText();
-        return atomicQueryPromise({
-            message: HostInteropType.EDITOR_SAVE_CODE,
+        return window.atomicQueryPromise(HostInteropType.EDITOR_SAVE_CODE, {
             payload: source
         }).then(() => {
             editorCommands.codeSaved(this.fileName, this.fileExt, source);
@@ -125,13 +137,9 @@ export default class HostInteropType {
      * @return {Promise}
      */
     saveFile(filename: string, fileContents: string): Promise<any> {
-        const fileExt = filename.indexOf(".") != -1 ? filename.split(".").pop() : "";
-        return atomicQueryPromise({
-            message: HostInteropType.EDITOR_SAVE_FILE,
+        return window.atomicQueryPromise(HostInteropType.EDITOR_SAVE_FILE, {
             filename: filename,
             payload: fileContents
-        }).then(() => {
-            editorCommands.codeSaved(filename, fileExt, fileContents);
         });
     }
 
@@ -143,7 +151,8 @@ export default class HostInteropType {
         if (DEBUG_ALERT) {
             alert(`Attach chrome dev tools to this instance by navigating to http://localhost:${DEBUG_PORT}`);
         }
-        atomicQueryPromise(HostInteropType.EDITOR_LOAD_COMPLETE);
+        editorCommands.editorLoaded();
+        window.atomicQueryPromise(HostInteropType.EDITOR_LOAD_COMPLETE);
     }
 
     /**
@@ -177,7 +186,7 @@ export default class HostInteropType {
      * Notify the host that the contents of the editor has changed
      */
     notifyEditorChange() {
-        atomicQueryPromise(HostInteropType.EDITOR_CHANGE).catch((e: Editor.ClientExtensions.AtomicErrorMessage) => {
+        window.atomicQueryPromise(HostInteropType.EDITOR_CHANGE).catch((e: Editor.ClientExtensions.AtomicErrorMessage) => {
             console.log("Error on change: " + e.error_message);
         });
     }
@@ -201,17 +210,58 @@ export default class HostInteropType {
     }
 
     /**
-     * Host is notifying client that there are preferences to load and passing us the path
+     * Host is notifying client that there are preferences to load and passing us JSON objects containing the prefs
      * of the prefs.
-     * @param  {string} prefUrl
      */
-    loadPreferences(prefUrl: string) {
-        // load prefs
-        this.getResource(prefUrl).then((prefsJson: string) => {
-            let prefs = JSON.parse(prefsJson);
-            editorCommands.loadPreferences(prefs);
-        }).catch((e: Editor.ClientExtensions.AtomicErrorMessage) => {
-            console.log("Error loading preferences: " + e.error_message);
+    preferencesChanged(prefs: Editor.ClientExtensions.PreferencesChangedEventData) {
+        editorCommands.preferencesChanged(prefs);
+    }
+
+    /**
+     * This adds a global routine to the window object so that it can be called from the host
+     * @param  {string} routineName
+     * @param  {(} callback
+     */
+    addCustomHostRoutine(routineName: string, callback: () => void) {
+        window[routineName] = callback;
+    }
+
+    /**
+     * Sets the editor instance
+     * @param  {any} editor
+     */
+    setEditor(editor: any) {
+        editorCommands.setEditor(editor);
+    }
+
+    /**
+     * Called when a shortcut should be invoked, coming from the host editor
+     * @param {Editor.EditorShortcutType} shortcut shortcut to be executed
+     */
+    invokeShortcut(shortcut: Editor.EditorShortcutType) {
+       editorCommands.invokeShortcut(shortcut);
+    }
+
+    /**
+     * Format the code inside the editor
+     */
+    formatCode() {
+        editorCommands.formatCode();
+    }
+
+    /**
+     * Jump to the provided line number
+     */
+    gotoLineNumber(lineNumber:number) {
+        this.editorReady.then(() => {
+            editorCommands.gotoLineNumber(lineNumber);
         });
+    }
+
+    /**
+     * Jump to the provided position
+     */
+    gotoTokenPos(tokenPos:number) {
+        editorCommands.gotoTokenPos(tokenPos);
     }
 }

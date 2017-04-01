@@ -21,6 +21,8 @@
 //
 
 #include <Duktape/duktape.h>
+#include <Duktape/duk_logging.h>
+#include <Duktape/duk_module_duktape.h>
 
 #include <Atomic/Core/Profiler.h>
 #include <Atomic/Core/CoreEvents.h>
@@ -45,11 +47,15 @@ namespace Atomic
 {
 
 JSVM* JSVM::instance_ = NULL;
+Vector<JSVM::JSAPIPackageRegistration*> JSVM::packageRegistrations_;
 
 JSVM::JSVM(Context* context) :
     Object(context),
     ctx_(0),
-    gcTime_(0.0f)
+    gcTime_(0.0f),
+    stashCount_(0),
+    totalStashCount_(0),
+    totalUnstashCount_(0)
 {
     assert(!instance_);
 
@@ -60,6 +66,7 @@ JSVM::JSVM(Context* context) :
     SharedPtr<JSEventDispatcher> dispatcher(new JSEventDispatcher(context_));
     context_->RegisterSubsystem(dispatcher);
     context_->AddGlobalEventListener(dispatcher);
+    RefCounted::AddRefCountChangedFunction(OnRefCountChanged);
 
 }
 
@@ -69,12 +76,19 @@ JSVM::~JSVM()
     context_->RemoveSubsystem(JSEventDispatcher::GetTypeStatic());
 
     duk_destroy_heap(ctx_);
+
+    RefCounted::RemoveRefCountChangedFunction(OnRefCountChanged);
+
+    // assert(stashCount_ == 0);
+
     instance_ = NULL;
 }
 
 void JSVM::InitJSContext()
 {
     ctx_ = duk_create_heap_default();
+    duk_logging_init(ctx_, 0);
+    duk_module_duktape_init(ctx_);
 
     jsapi_init_atomic(this);
 
@@ -84,31 +98,149 @@ void JSVM::InitJSContext()
     duk_put_prop_string(ctx_, -2, "editor");
     duk_pop(ctx_);
 
-    duk_push_global_stash(ctx_);
-    duk_push_object(ctx_);
-    duk_put_prop_index(ctx_, -2, JS_GLOBALSTASH_INDEX_COMPONENTS);
-    duk_pop(ctx_);
-
     js_init_require(this);
     js_init_jsplugin(this);
 
     ui_ = new JSUI(context_);
+
+    InitializePackages();
 
     // handle this elsewhere?
     SubscribeToEvents();
 
 }
 
+void JSVM::InitializePackages()
+{   
+    for (unsigned i = 0; i < packageRegistrations_.Size(); i++)
+    {
+        JSAPIPackageRegistration* pkgReg = packageRegistrations_.At(i);
+
+        if (pkgReg->registrationFunction)
+        {
+            pkgReg->registrationFunction(this);
+        }
+        else
+        {
+            pkgReg->registrationSettingsFunction(this, pkgReg->settings);
+        }
+
+        delete pkgReg;
+    }
+
+    packageRegistrations_.Clear();
+    
+}
+
+void JSVM::RegisterPackage(JSVMPackageRegistrationFunction regFunction)
+{
+    packageRegistrations_.Push(new JSAPIPackageRegistration(regFunction));
+}
+
+void JSVM::RegisterPackage(JSVMPackageRegistrationSettingsFunction regFunction, const VariantMap& settings)
+{
+    packageRegistrations_.Push(new JSAPIPackageRegistration(regFunction, settings));
+}
 
 void JSVM::SubscribeToEvents()
 {
-    SubscribeToEvent(E_UPDATE, HANDLER(JSVM, HandleUpdate));
+    SubscribeToEvent(E_UPDATE, ATOMIC_HANDLER(JSVM, HandleUpdate));
 }
+
+void JSVM::OnRefCountChanged(RefCounted* refCounted, int refCount)
+{
+    assert(instance_);
+    assert(refCounted->JSGetHeapPtr());
+
+    if (refCount == 1)
+    {
+        // only script reference is left, so unstash
+        instance_->Unstash(refCounted);
+    }
+    else if (refCount == 2)
+    {
+        // We are going from solely having a script reference to having another reference
+        instance_->Stash(refCounted);
+    }
+
+}
+
+void JSVM::Stash(RefCounted* refCounted)
+{
+    assert(refCounted);
+    assert(refCounted->JSGetHeapPtr());
+
+    totalStashCount_++;
+    stashCount_++;
+
+    duk_push_global_stash(ctx_);
+    duk_get_prop_index(ctx_, -1, JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY);
+    // can't use instance as key, as this coerces to [Object] for
+    // string property, pointer will be string representation of
+    // address, so, unique key
+
+/*
+    duk_push_pointer(ctx_, refCounted);
+    duk_get_prop(ctx_, -2);
+    assert(duk_is_undefined(ctx_, -1));
+    duk_pop(ctx_);
+*/
+
+    duk_push_pointer(ctx_, refCounted);
+    duk_push_heapptr(ctx_, refCounted->JSGetHeapPtr());
+    
+    duk_put_prop(ctx_, -3);
+    duk_pop_2(ctx_);
+
+}
+void JSVM::Unstash(RefCounted* refCounted)
+{
+    assert(refCounted);
+    assert(refCounted->JSGetHeapPtr());
+
+    assert(stashCount_ > 0);
+
+    stashCount_--;
+    totalUnstashCount_++;
+
+    duk_push_global_stash(ctx_);
+    duk_get_prop_index(ctx_, -1, JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY);
+    // can't use instance as key, as this coerces to [Object] for
+    // string property, pointer will be string representation of
+    // address, so, unique key
+
+/*
+    duk_push_pointer(ctx_, refCounted);
+    duk_get_prop(ctx_, -2);
+    assert(!duk_is_undefined(ctx_, -1));
+    duk_pop(ctx_);
+*/
+
+    duk_push_pointer(ctx_, refCounted);
+    duk_del_prop(ctx_, -2);   
+    duk_pop_2(ctx_);
+}
+
+// Returns if the given object is stashed
+bool JSVM::GetStashed(RefCounted* refcounted) const
+{
+    duk_push_global_stash(ctx_);
+    duk_get_prop_index(ctx_, -1, JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY);
+
+    duk_push_pointer(ctx_, refcounted);
+    duk_get_prop(ctx_, -2);
+
+    bool result = !duk_is_undefined(ctx_, -1);
+
+    duk_pop_3(ctx_);
+    return result;
+}
+
 
 void JSVM::HandleUpdate(StringHash eventType, VariantMap& eventData)
 {
 
-    PROFILE(JSVM_HandleUpdate);
+    ATOMIC_PROFILE(JSVM_HandleUpdate);
 
     using namespace Update;
 
@@ -118,7 +250,7 @@ void JSVM::HandleUpdate(StringHash eventType, VariantMap& eventData)
     gcTime_ += timeStep;
     if (gcTime_ > 5.0f)
     {
-        PROFILE(JSVM_GC);
+        ATOMIC_PROFILE(JSVM_GC);
 
         // run twice to call finalizers
         // see duktape docs
@@ -128,6 +260,8 @@ void JSVM::HandleUpdate(StringHash eventType, VariantMap& eventData)
         duk_gc(ctx_, 0);
 
         gcTime_ = 0;
+
+        // DumpJavascriptObjects();
 
     }
 
@@ -259,7 +393,7 @@ void JSVM::SendJSErrorEvent(const String& filename)
 
     duk_pop_n(ctx, 5);
 
-    LOGERRORF("JSErrorEvent: %s : Line %i\n Name: %s\n Message: %s\n Stack:%s",
+    ATOMIC_LOGERRORF("JSErrorEvent: %s : Line %i\n Name: %s\n Message: %s\n Stack:%s",
               filename.CString(), lineNumber, name.CString(), message.CString(), stack.CString());
 
     SendEvent(E_JSERROR, eventData);
@@ -441,6 +575,74 @@ bool JSVM::ExecuteMain()
     duk_pop(ctx_);
 
     return true;
+
+}
+
+void JSVM::DumpJavascriptObjects()
+{
+    ATOMIC_LOGINFOF("--- JS Objects ---");
+    ATOMIC_LOGINFOF("Stash Count: %u, Total Stash: %u, Total Unstash: %u", stashCount_, totalStashCount_, totalUnstashCount_);
+
+    HashMap<StringHash, String> strLookup;
+    HashMap<StringHash, unsigned> totalClassCount;
+    HashMap<StringHash, unsigned> stashedClassCount;
+    HashMap<StringHash, int> maxRefCount;
+
+    StringHash refCountedTypeHash("RefCounted");
+    strLookup[refCountedTypeHash] = "RefCounted";
+
+    duk_push_global_stash(ctx_);
+    duk_get_prop_index(ctx_, -1, JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY);
+
+    HashMap<void*, RefCounted*>::ConstIterator itr = heapToObject_.Begin();
+    while (itr != heapToObject_.End())
+    {
+        void* heapPtr = itr->first_;
+        RefCounted* refCounted = itr->second_;
+
+        // TODO: need a lookup for refcounted classid to typename
+        const String& className = refCounted->IsObject() ? ((Object*)refCounted)->GetTypeName() : "RefCounted";
+        StringHash typeHash = refCounted->IsObject() ? ((Object*)refCounted)->GetType() : refCountedTypeHash;
+
+        strLookup.InsertNew(typeHash, className);
+
+        totalClassCount.InsertNew(typeHash, 0);
+        totalClassCount[typeHash]++;
+
+        maxRefCount.InsertNew(typeHash, 0);
+        if (refCounted->Refs() > maxRefCount[typeHash])
+            maxRefCount[typeHash] = refCounted->Refs();
+
+        duk_push_pointer(ctx_, refCounted);
+        duk_get_prop(ctx_, -2);
+
+        if (!duk_is_undefined(ctx_, -1))
+        {
+            stashedClassCount.InsertNew(typeHash, 0);
+            stashedClassCount[typeHash]++;
+        }
+
+        duk_pop(ctx_);
+
+        itr++;
+
+    }
+
+    HashMap<StringHash, String>::ConstIterator itr2 = strLookup.Begin();
+    while (itr2 != strLookup.End())
+    {
+        StringHash typeHash = itr2->first_;
+        const String& className = itr2->second_;
+        unsigned totalCount = totalClassCount[typeHash];
+        unsigned stashedCount = stashedClassCount[typeHash];
+        int _maxRefCount = maxRefCount[typeHash];
+
+        ATOMIC_LOGINFOF("Classname: %s, Total: %u, Stashed: %u, Max Refs: %i", className.CString(), totalCount, stashedCount, _maxRefCount);
+
+        itr2++;
+    }
+
+    duk_pop_2(ctx_);
 
 }
 

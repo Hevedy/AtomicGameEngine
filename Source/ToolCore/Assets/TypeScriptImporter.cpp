@@ -23,21 +23,17 @@
 #include <Atomic/IO/Log.h>
 #include <Atomic/IO/File.h>
 #include <Atomic/Resource/ResourceCache.h>
-#include <Atomic/Resource/Image.h>
-
 #include <AtomicJS/Javascript/JSComponentFile.h>
 
 #include "Asset.h"
 #include "AssetDatabase.h"
 #include "TypeScriptImporter.h"
 
-
 namespace ToolCore
 {
 
 TypeScriptImporter::TypeScriptImporter(Context* context, Asset *asset) : AssetImporter(context, asset)
 {
-    requiresCacheFile_ = false;
     isComponentFile_ = false;
 }
 

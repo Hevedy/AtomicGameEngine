@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,10 @@
 #include "../Input/InputEvents.h"
 #include "../UI/UIButton.h"
 
+// ATOMIC BEGIN
+// #include "../UI/Cursor.h"
+// ATOMIC END
+
 namespace Atomic
 {
 
@@ -37,13 +41,15 @@ enum MouseMode
 {
     MM_ABSOLUTE = 0,
     MM_RELATIVE,
-    MM_WRAP
+    MM_WRAP,
+    MM_FREE,
+    MM_INVALID
 };
 
 class Deserializer;
 class Graphics;
 class Serializer;
-class UIElement;
+class UIWidget;
 class XMLFile;
 class UIButton;
 
@@ -52,6 +58,9 @@ const IntVector2 MOUSE_POSITION_OFFSCREEN = IntVector2(M_MIN_INT, M_MIN_INT);
 /// %Input state for a finger touch.
 struct TouchState
 {
+    /// Return last touched UI element, used by scripting integration.
+    UIWidget* GetTouchedElement();
+
     /// Touch (finger) ID.
     int touchID_;
     /// Position in screen coordinates.
@@ -62,16 +71,28 @@ struct TouchState
     IntVector2 delta_;
     /// Finger pressure.
     float pressure_;
-    /// Last touched UI element from screen joystick.
+// ATOMIC BEGIN
+    /// Last touched UI widget
     WeakPtr<UIWidget> touchedWidget_;
+// ATOMIC END
 };
 
 /// %Input state for a joystick.
-struct JoystickState
+// ATOMIC BEGIN
+class JoystickState : public RefCounted
 {
+    ATOMIC_REFCOUNTED(JoystickState)
+// ATOMIC END
+
+public:
     /// Construct with defaults.
     JoystickState() :
-        joystick_(0), controller_(0)
+        joystick_(0), joystickID_(0), controller_(0),
+// ATOMIC BEGIN
+        haptic_(0),
+        canRumble_(true),
+// ATOMIC END
+        name_()
     {
     }
 
@@ -104,14 +125,27 @@ struct JoystickState
     /// Return hat position.
     int GetHatPosition(unsigned index) const { return index < hats_.Size() ? hats_[index] : HAT_CENTER; }
 
+    // ATOMIC BEGIN
+    /// Haptic aka Rumble support
+    bool StartRumble();
+    void StopRumble();
+    bool IsRumble();
+    void DoRumble( float strength, unsigned int length); 
+    // ATOMIC END
+
     /// SDL joystick.
     SDL_Joystick* joystick_;
     /// SDL joystick instance ID.
     SDL_JoystickID joystickID_;
     /// SDL game controller.
     SDL_GameController* controller_;
+    // ATOMIC BEGIN
+    /// Haptic support
+    SDL_Haptic *haptic_;
+    bool canRumble_;
     /// UI element containing the screen joystick.
     // UIElement* screenJoystick_;
+    // ATOMIC END
     /// Joystick name.
     String name_;
     /// Button up/down state.
@@ -124,16 +158,16 @@ struct JoystickState
     PODVector<int> hats_;
 };
 
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 class EmscriptenInput;
 #endif
 
 /// %Input subsystem. Converts operating system window messages to input state and events.
 class ATOMIC_API Input : public Object
 {
-    OBJECT(Input);
+    ATOMIC_OBJECT(Input, Object);
 
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
     friend class EmscriptenInput;
 #endif
 
@@ -152,7 +186,9 @@ public:
     /// Reset last mouse visibility that was not suppressed in SetMouseVisible.
     void ResetMouseVisible();
     /// Set whether the mouse is currently being grabbed by an operation.
-    void SetMouseGrabbed(bool grab);
+    void SetMouseGrabbed(bool grab, bool suppressEvent = false);
+    /// Reset the mouse grabbed to the last unsuppressed SetMouseGrabbed call
+    void ResetMouseGrabbed();
     /// Set the mouse mode.
     /** Set the mouse mode behaviour.
      *  MM_ABSOLUTE is the default behaviour, allowing the toggling of operating system cursor visibility and allowing the cursor to escape the window when visible.
@@ -167,8 +203,13 @@ public:
      *
      *  MM_WRAP grabs the mouse from the operating system and confines the operating system cursor to the window, wrapping the cursor when it is near the edges.
      *  SetMouseMode(MM_WRAP) will call SetMouseGrabbed(true).
+     *
+     *  MM_FREE does not grab/confine the mouse cursor even when it is hidden. This can be used for cases where the cursor should render using the operating system
+     *  outside the window, and perform custom rendering (with SetMouseVisible(false)) inside.
     */
-    void SetMouseMode(MouseMode mode);
+    void SetMouseMode(MouseMode mode, bool suppressEvent = false);
+    /// Reset the last mouse mode that wasn't suppressed in SetMouseMode
+    void ResetMouseMode();
     /// Add screen joystick.
     /** Return the joystick instance ID when successful or negative on error.
      *  If layout file is not given, use the default screen joystick layout.
@@ -201,6 +242,10 @@ public:
     bool RemoveGesture(unsigned gestureID);
     /// Remove all in-memory gestures.
     void RemoveAllGestures();
+    /// Set the mouse cursor position.
+    void SetMousePosition(const IntVector2& position);
+    /// Center the mouse position.
+    void CenterMousePosition();
 
     /// Return keycode from key name.
     int GetKeyFromName(const String& name) const;
@@ -234,32 +279,28 @@ public:
     int GetQualifiers() const;
     /// Return mouse position within window. Should only be used with a visible mouse cursor.
     IntVector2 GetMousePosition() const;
-
     /// Return mouse movement since last frame.
-    const IntVector2& GetMouseMove() const { return mouseMove_; }
-
+    const IntVector2& GetMouseMove() const;
     /// Return horizontal mouse movement since last frame.
-    int GetMouseMoveX() const { return mouseMove_.x_; }
-
+    int GetMouseMoveX() const;
     /// Return vertical mouse movement since last frame.
-    int GetMouseMoveY() const { return mouseMove_.y_; }
-
+    int GetMouseMoveY() const;
     /// Return mouse wheel movement since last frame.
     int GetMouseMoveWheel() const { return mouseMoveWheel_; }
 
     /// Return number of active finger touches.
     unsigned GetNumTouches() const { return touches_.Size(); }
-
     /// Return active finger touch by index.
     TouchState* GetTouch(unsigned index) const;
 
     /// Return number of connected joysticks.
     unsigned GetNumJoysticks() const { return joysticks_.Size(); }
-
     /// Return joystick state by ID, or null if does not exist.
     JoystickState* GetJoystick(SDL_JoystickID id);
     /// Return joystick state by index, or null if does not exist. 0 = first connected joystick.
     JoystickState* GetJoystickByIndex(unsigned index);
+    /// Return joystick state by name, or null if does not exist.
+    JoystickState* GetJoystickByName(const String& name);
 
     /// Return whether fullscreen toggle is enabled.
     bool GetToggleFullscreen() const { return toggleFullscreen_; }
@@ -276,9 +317,10 @@ public:
 
     /// Return whether the operating system mouse cursor is visible.
     bool IsMouseVisible() const { return mouseVisible_; }
-
     /// Return whether the mouse is currently being grabbed by an operation.
     bool IsMouseGrabbed() const { return mouseGrabbed_; }
+    /// Return whether the mouse is locked to the window
+    bool IsMouseLocked() const;
 
     /// Return the mouse mode.
     MouseMode GetMouseMode() const { return mouseMode_; }
@@ -289,11 +331,26 @@ public:
     /// Return whether application window is minimized.
     bool IsMinimized() const;
 
+// ATOMIC BEGIN
     /// Binds UIButton element to the given button
     void BindButton(UIButton* touchButton, int button);
 
     void SimulateButtonDown(int button);
     void SimulateButtonUp(int button);
+    
+    bool GetJoystickRumble(unsigned int id);  /// return if rumble is supported on game controller
+    void JoystickRumble(unsigned int id, float strength, unsigned int length); /// produce rumble
+    void JoystickSimulateMouseMove(int xpos, int ypos); /// moves the on screen cursor
+    void JoystickSimulateMouseButton(int button); /// simulated mouse press down & up
+
+    int GetTouchID(unsigned index) { if (index >= touches_.Size()) return 0; return touches_[index].touchID_; }
+    const IntVector2& GetTouchPosition(unsigned index) { if (index >= touches_.Size()) return IntVector2::ZERO; return touches_[index].position_; }
+    const IntVector2& GetTouchLastPosition(unsigned index) { if (index >= touches_.Size()) return IntVector2::ZERO; return touches_[index].lastPosition_; }
+    const IntVector2& GetTouchDelta(unsigned index) { if (index >= touches_.Size()) return IntVector2::ZERO; return touches_[index].delta_; }
+    const float GetTouchPressure(unsigned index) { if (index >= touches_.Size()) return 0.0f; return touches_[index].pressure_; }
+    UIWidget* GetTouchWidget(unsigned index) { if (index >= touches_.Size()) return 0; return touches_[index].touchedWidget_; }    
+
+// ATOMIC END
 
 private:
     /// Initialize when screen mode initially set.
@@ -310,6 +367,8 @@ private:
     void ResetState();
     /// Clear touch states and send touch end events.
     void ResetTouches();
+    /// Reset input accumulation.
+    void ResetInputAccumulation();
     /// Get the index of a touch based on the touch ID.
     unsigned GetTouchIndexFromID(int touchID);
     /// Used internally to return and remove the next available touch index.
@@ -321,17 +380,13 @@ private:
     /// Handle a mouse button change.
     void SetMouseButton(int button, bool newState);
     /// Handle a key change.
-    void SetKey(int key, int scancode, unsigned raw, bool newState);
-#ifdef EMSCRIPTEN
-    /// Set whether the operating system mouse cursor is visible (Emscripten platform only).
-    void SetMouseVisibleEmscripten(bool enable);
-    /// Set mouse mode (Emscripten platform only).
-    void SetMouseModeEmscripten(MouseMode mode);
-#endif
+    void SetKey(int key, int scancode, bool newState);
     /// Handle mouse wheel change.
     void SetMouseWheel(int delta);
-    /// Internal function to set the mouse cursor position.
-    void SetMousePosition(const IntVector2& position);
+    /// Suppress next mouse movement.
+    void SuppressNextMouseMove();
+    /// Unsuppress mouse movement.
+    void UnsuppressMouseMove();
     /// Handle screen mode event.
     void HandleScreenMode(StringHash eventType, VariantMap& eventData);
     /// Handle frame start event.
@@ -340,6 +395,22 @@ private:
     void HandleScreenJoystickTouch(StringHash eventType, VariantMap& eventData);
     /// Handle SDL event.
     void HandleSDLEvent(void* sdlEvent);
+
+#ifndef __EMSCRIPTEN__
+    /// Set SDL mouse mode relative.
+    void SetMouseModeRelative(SDL_bool enable);
+    /// Set SDL mouse mode absolute.
+    void SetMouseModeAbsolute(SDL_bool enable);
+#else
+    /// Set whether the operating system mouse cursor is visible (Emscripten platform only).
+    void SetMouseVisibleEmscripten(bool enable, bool suppressEvent = false);
+    /// Set mouse mode final resolution (Emscripten platform only).
+    void SetMouseModeEmscriptenFinal(MouseMode mode, bool suppressEvent = false);
+    /// SetMouseMode  (Emscripten platform only).
+    void SetMouseModeEmscripten(MouseMode mode, bool suppressEvent);
+    /// Handle frame end event.
+    void HandleEndFrame(StringHash eventType, VariantMap& eventData);
+#endif
 
     /// Graphics subsystem.
     WeakPtr<Graphics> graphics_;
@@ -359,8 +430,12 @@ private:
     HashMap<int, int> touchIDMap_;
     /// String for text input.
     String textInput_;
+
+// ATOMIC BEGIN
     /// Opened joysticks.
-    HashMap<SDL_JoystickID, JoystickState> joysticks_;
+    HashMap<SDL_JoystickID, SharedPtr<JoystickState>> joysticks_;
+// ATOMIC END
+
     /// Mouse buttons' down state.
     unsigned mouseButtonDown_;
     /// Mouse buttons' pressed state.
@@ -383,8 +458,16 @@ private:
     bool lastMouseVisible_;
     /// Flag to indicate the mouse is being grabbed by an operation. Subsystems like UI that uses mouse should temporarily ignore the mouse hover or click events.
     bool mouseGrabbed_;
+    /// The last mouse grabbed set by SetMouseGrabbed.
+    bool lastMouseGrabbed_;
     /// Determines the mode of mouse behaviour.
     MouseMode mouseMode_;
+    /// The last mouse mode set by SetMouseMode.
+    MouseMode lastMouseMode_;
+#ifndef __EMSCRIPTEN__
+    /// Flag to determine whether SDL mouse relative was used.
+    bool sdlMouseRelative_;
+#endif
     /// Touch emulation mode flag.
     bool touchEmulation_;
     /// Input focus flag.
@@ -401,13 +484,16 @@ private:
     bool screenModeChanged_;
     /// Initialized flag.
     bool initialized_;
-#ifdef EMSCRIPTEN
+
+#ifdef __EMSCRIPTEN__
     /// Emscripten Input glue instance.
     EmscriptenInput* emscriptenInput_;
-    /// Flag used to detect mouse jump when exiting pointer lock.
+    /// Flag used to detect mouse jump when exiting pointer-lock.
     bool emscriptenExitingPointerLock_;
-    /// Flag used to detect mouse jump on initial mouse click when entering pointer lock.
+    /// Flag used to detect mouse jump on initial mouse click when entering pointer-lock.
     bool emscriptenEnteredPointerLock_;
+    /// Flag indicating current pointer-lock status.
+    bool emscriptenPointerLock_;
 #endif
 };
 

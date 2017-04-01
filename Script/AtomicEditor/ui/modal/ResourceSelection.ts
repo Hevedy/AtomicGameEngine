@@ -21,7 +21,6 @@
 //
 
 import EditorUI = require("../EditorUI");
-import EditorEvents = require("../../editor/EditorEvents");
 import ModalWindow = require("./ModalWindow");
 import SearchBarFiltering = require("resources/SearchBarFiltering");
 
@@ -52,13 +51,7 @@ class ResourceSelection extends ModalWindow {
         this.setSize(800, 600);
         this.center();
 
-        //Activates the search as the user types
-        this.searchEdit.subscribeToEvent(this.searchEdit, "WidgetEvent", (data) => {
-
-            if (data.type == Atomic.UI_EVENT_TYPE_KEY_UP) {
-                this.populate(this.importerType, this.resourceType, true);
-            }
-        });
+        this.searchEdit.subscribeToEvent(this.searchEdit, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 
@@ -129,7 +122,15 @@ class ResourceSelection extends ModalWindow {
             }
         }
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_KEY_UP) {
+
+            //Activates the search as the user types
+            if (ev.target == this.searchEdit)
+                this.populate(this.importerType, this.resourceType, true);
+
+        }
+
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
             var id = ev.target.id;
 
             if (id == "select") {
@@ -157,7 +158,7 @@ class ResourceSelection extends ModalWindow {
         var id = this.folderList.selectedItemID;
 
         if (id == "") {
-            this.sendEvent(EditorEvents.RemoveCurrentAssetAssigned);
+            this.callback(null, this.args);
             this.hide();
             return true;
         }

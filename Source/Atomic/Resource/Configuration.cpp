@@ -62,6 +62,19 @@ namespace Atomic
         return value;
     }
 
+    void Configuration::GetArrayValue(const JSONArray & jarray, StringVector& value)
+    {
+        value.Clear();
+
+        for (JSONArray::ConstIterator it = jarray.Begin(); it != jarray.End(); it++)
+        {
+            if (it->IsString())
+            {
+                value.Push(it->GetString());
+            }
+        }
+
+    }
 
     Configuration::Configuration() :
         isLoaded_(false)
@@ -82,7 +95,7 @@ namespace Atomic
 
         if (!file->Open(filename))
         {
-            LOGERRORF("Configuration::LoadFromFile - Unable to open config file %s", filename.CString());
+            ATOMIC_LOGERRORF("Configuration::LoadFromFile - Unable to open config file %s", filename.CString());
             return false;
         }
 
@@ -95,7 +108,7 @@ namespace Atomic
     void Configuration::ApplyConfig(VariantMap& settings, bool overwrite)
     {
         if (!isLoaded_) {
-            LOGERROR("Configuration::ApplyConfig - Applying a config that has not yet been populated");
+            ATOMIC_LOGERRORF("Configuration::ApplyConfig - Applying a config that has not yet been populated");
             return;
         }
 
@@ -127,7 +140,7 @@ namespace Atomic
 
         if (!JSONFile::ParseJSON(json, jroot))
         {
-            LOGERRORF("Configuration::LoadFromJSON - Unable to parse config file JSON: %s", filename_.CString());
+            ATOMIC_LOGERRORF("Configuration::LoadFromJSON - Unable to parse config file JSON: %s", filename_.CString());
             return false;
         }
 

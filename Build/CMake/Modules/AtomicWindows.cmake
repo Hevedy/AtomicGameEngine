@@ -8,31 +8,34 @@ include(AtomicDesktop)
 set (ATOMIC_NODE_JAKE Build/Windows/node/node.exe Build/node_modules/jake/bin/cli.js  -f  Build\\Scripts\\Bootstrap.js)
 
 if( CMAKE_SIZEOF_VOID_P EQUAL 8 )
-    set (D3DCOMPILER_47_DLL ${CMAKE_SOURCE_DIR}/Build/Windows/Binaries/x64/D3DCompiler_47.dll)
+    set (D3DCOMPILER_47_DLL ${ATOMIC_SOURCE_DIR}/Build/Windows/Binaries/x64/D3DCompiler_47.dll)
 else()
-    set (D3DCOMPILER_47_DLL ${CMAKE_SOURCE_DIR}/Build/Windows/Binaries/x86/D3DCompiler_47.dll)
+    set (D3DCOMPILER_47_DLL ${ATOMIC_SOURCE_DIR}/Build/Windows/Binaries/x86/D3DCompiler_47.dll)
 endif()
 
-add_definitions(-DATOMIC_PLATFORM_WINDOWS -D_CRT_SECURE_NO_WARNINGS -DATOMIC_TBUI )
+add_definitions_exported(-DATOMIC_PLATFORM_WINDOWS -DATOMIC_TBUI )
+add_definitions(-D_CRT_SECURE_NO_WARNINGS )
 
-list (APPEND ATOMIC_LINK_LIBRARIES MojoShader user32 gdi32 winmm imm32 ole32 oleaut32 version uuid Ws2_32)
+add_link_libraries_exported(MojoShader user32 gdi32 winmm imm32 ole32 oleaut32 version uuid Ws2_32)
 
-if (ATOMIC_D3D11)
-
-    add_definitions(-DATOMIC_D3D11)
-
-    list (APPEND ATOMIC_LINK_LIBRARIES d3d11 d3dcompiler dxguid)
-
-else()
-
-    list (APPEND ATOMIC_LINK_LIBRARIES  d3d9 d3dcompiler)
-
+if (ATOMIC_D3D11) #DirectX 11
+    add_definitions_exported(-DATOMIC_D3D11)
+    add_link_libraries_exported(d3d11 d3dcompiler dxguid)
+elseif(ATOMIC_OPENGL) #OpenGL
+	find_package(OpenGL REQUIRED)
+	include_directories(${OpenGL_INCLUDE_DIRS})
+	link_directories(${OpenGL_LIBRARY_DIRS})
+	add_definitions(${OpenGL_DEFINITIONS})
+	add_definitions (-DATOMIC_OPENGL -DGLEW_STATIC)
+	list (APPEND ATOMIC_LINK_LIBRARIES GLEW opengl32 glu32)
+else() #DirectX 9
+    add_link_libraries_exported(d3d9 d3dcompiler)
 endif()
 
 # removes dependency on D3DCompiler dll for Atomic Direct3D9 builds which don't require it
 # (binaries that never initialize the Direct3D9 graphics subsystem)
 if (ATOMIC_D3D9SHADERCOMPILER_DISABLE)
-  add_definitions(-DATOMIC_D3D9SHADERCOMPILER_DISABLE)
+  add_definitions_exported(-DATOMIC_D3D9SHADERCOMPILER_DISABLE)
 endif()
 
 

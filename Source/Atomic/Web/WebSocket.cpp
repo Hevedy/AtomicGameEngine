@@ -25,6 +25,7 @@
 #include "../Core/Profiler.h"
 #include "../IO/BufferQueue.h"
 #include "../IO/Log.h"
+#include "../Web/Web.h"
 #include "../Web/WebSocket.h"
 
 #ifdef EMSCRIPTEN
@@ -70,18 +71,18 @@ struct WebSocketInternalState
     WebSocketInternalState(WebSocket *es_)
         : es(es_)
     {
-        LOGDEBUG("Create WebSocketInternalState");
+        ATOMIC_LOGDEBUG("Create WebSocketInternalState");
     }
 
     ~WebSocketInternalState()
     {
-        LOGDEBUG("Destroy WebSocketInternalState");
+        ATOMIC_LOGDEBUG("Destroy WebSocketInternalState");
     }
 
     void OnOpen(websocketpp::connection_hdl hdl)
     {
         state = WS_OPEN;
-        LOGDEBUG("WebSocket CONNECTED to: " + url);
+        ATOMIC_LOGDEBUG("WebSocket CONNECTED to: " + url);
         if (es)
         {
             es->SendEvent("open");
@@ -91,7 +92,7 @@ struct WebSocketInternalState
     void OnClose(websocketpp::connection_hdl hdl)
     {
         state = WS_CLOSED;
-        LOGDEBUG("WebSocket DISCONNECTED from: " + url);
+        ATOMIC_LOGDEBUG("WebSocket DISCONNECTED from: " + url);
         if (es)
         {
             es->SendEvent("close");
@@ -101,7 +102,7 @@ struct WebSocketInternalState
     void OnFail(websocketpp::connection_hdl hdl)
     {
         state = WS_FAIL_TO_CONNECT;
-        LOGDEBUG("WebSocket FAILED to connect to: " + url);
+        ATOMIC_LOGDEBUG("WebSocket FAILED to connect to: " + url);
         if (es)
         {
             es->SendEvent("fail_to_connect");
@@ -132,7 +133,7 @@ struct WebSocketInternalState
         {
             state = WS_INVALID;
             error = ec.message().c_str();
-            LOGDEBUG("WebSocket error: " + error);
+            ATOMIC_LOGDEBUG("WebSocket error: " + error);
             if (es)
             {
                 es->SendEvent("invalid");
@@ -152,18 +153,21 @@ WebSocket::WebSocket(Context* context, const String& url) :
 
     is_->c.clear_access_channels(websocketpp::log::alevel::all);
     is_->c.clear_error_channels(websocketpp::log::elevel::all);
+
+    Web* web = GetSubsystem<Web>();
+    web->setup(*this);
 }
 
 void WebSocket::setup(asio::io_service *service)
 {
-    LOGDEBUG("Create WebSocket");
+    ATOMIC_LOGDEBUG("Create WebSocket");
     websocketpp::lib::error_code ec;
     is_->c.init_asio(service, ec);
     if (ec)
     {
         is_->state = WS_INVALID;
         is_->error = ec.message().c_str();
-        LOGDEBUG("WebSocket error: " + is_->error);
+        ATOMIC_LOGDEBUG("WebSocket error: " + is_->error);
         SendEvent("invalid");
         return;
     }
@@ -172,14 +176,14 @@ void WebSocket::setup(asio::io_service *service)
     is_->c.set_fail_handler(bind(&WebSocketInternalState::OnFail, is_, ::_1));
     is_->c.set_message_handler(bind(&WebSocketInternalState::OnMessage, is_, ::_1, ::_2));
 
-    LOGDEBUG("WebSocket request to URL " + is_->url);
+    ATOMIC_LOGDEBUG("WebSocket request to URL " + is_->url);
 
     is_->MakeConnection();
 }
 
 WebSocket::~WebSocket()
 {
-    LOGDEBUG("Destroy WebSocket");
+    ATOMIC_LOGDEBUG("Destroy WebSocket");
     std::error_code ec;
     is_->es = nullptr;
     is_->con->terminate(ec);
@@ -220,14 +224,14 @@ void  WebSocket::Close()
 {
     is_->state = WS_CLOSING;
     websocketpp::lib::error_code ec;
-    LOGDEBUG("WebSocket atempting to close URL " + is_->url);
+    ATOMIC_LOGDEBUG("WebSocket atempting to close URL " + is_->url);
     is_->con->terminate(ec);
 }
 
 void WebSocket::OpenAgain()
 {
     is_->state = WS_CONNECTING;
-    LOGDEBUG("WebSocket request (again) to URL " + is_->url);
+    ATOMIC_LOGDEBUG("WebSocket request (again) to URL " + is_->url);
     is_->MakeConnection();
 }
 

@@ -26,8 +26,10 @@ import Scene3dResourceEditorBuilder from "./resourceEditors/Scene3dResourceEdito
 import TextFileResourceEditorBuilder from "./resourceEditors/TextFileResourceEditorBuilder";
 import TurboBadgerResourceEditorBuilder from "./resourceEditors/TurboBadgerResourceEditorBuilder";
 import TypescriptResourceEditorBuilder from "./resourceEditors/TypescriptResourceEditorBuilder";
+import CSharpResourceEditorBuilder from "./resourceEditors/CSharpResourceEditorBuilder";
 import XMLResourceEditorBuilder from "./resourceEditors/XMLResourceEditorBuilder";
 import ShaderResourceEditorBuilder from "./resourceEditors/ShaderResourceEditorBuilder";
+import VisualStudioResourceEditorBuilder from "./resourceEditors/VisualStudioResourceEditorBuilder";
 
 export default class ResourceEditorProvider {
     private standardEditorRegistry: Editor.Extensions.ResourceEditorBuilder[] = [];
@@ -67,7 +69,7 @@ export default class ResourceEditorProvider {
     /**
      * Returns an editor for the provided resource type or null
      */
-    getEditor(resourcePath: string, tabContainer) {
+    getEditor(resourcePath: string, tabContainer, lineNumber: number) {
         let editorBuilder: Editor.Extensions.ResourceEditorBuilder;
         this.customEditorRegistry.forEach((builder) => {
             if (builder.canHandleResource(resourcePath)) {
@@ -86,7 +88,7 @@ export default class ResourceEditorProvider {
         }
 
         if (editorBuilder) {
-            return editorBuilder.getEditor(this.resourceFrame, resourcePath, tabContainer);
+            return editorBuilder.getEditor(this.resourceFrame, resourcePath, tabContainer, lineNumber);
         } else {
             return null;
         }
@@ -99,6 +101,7 @@ export default class ResourceEditorProvider {
         this.registerStandardEditor(new TextFileResourceEditorBuilder());
         this.registerStandardEditor(new JavascriptResourceEditorBuilder());
         this.registerStandardEditor(new JsonResourceEditorBuilder());
+        this.registerStandardEditor(new CSharpResourceEditorBuilder());
         this.registerStandardEditor(new TypescriptResourceEditorBuilder());
         this.registerStandardEditor(new Scene3dResourceEditorBuilder());
         this.registerStandardEditor(new XMLResourceEditorBuilder());
@@ -106,5 +109,7 @@ export default class ResourceEditorProvider {
 
         // this overrides the test resource editor so need to put it in the custom bucket
         this.registerCustomEditor(new TurboBadgerResourceEditorBuilder());
+
+        this.registerCustomEditor(new VisualStudioResourceEditorBuilder());
     }
 }

@@ -35,7 +35,7 @@ class UISelectItemSource;
 
 class UISelectItem : public Object
 {
-    OBJECT(UISelectItem)
+    ATOMIC_OBJECT(UISelectItem, Object)
 
 public:
 
@@ -66,7 +66,7 @@ protected:
 
 class UISelectItemSource : public Object
 {
-    OBJECT(UISelectItemSource)
+    ATOMIC_OBJECT(UISelectItemSource, Object)
 
 public:
 
@@ -79,6 +79,9 @@ public:
     int GetItemCount() { return items_.Size(); }
 
     void Clear() { items_.Clear(); }
+
+    /// Returns item string for the index. Returns empty string for invalid indexes.
+    const String& GetItemStr(int index);
 
     // caller's responsibility to clean up
     virtual tb::TBSelectItemSource* GetTBItemSource();

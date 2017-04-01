@@ -36,7 +36,7 @@ class JSComponent;
 /// Script document resource.
 class ATOMIC_API JSComponentFile : public ScriptComponentFile
 {
-    OBJECT(JSComponentFile);
+    ATOMIC_OBJECT(JSComponentFile, ScriptComponentFile);
 
 public:
 
@@ -54,7 +54,10 @@ public:
 
     bool GetScriptClass() { return scriptClass_; }
 
-    JSComponent* CreateJSComponent();
+    /// Returns true is this component file containes a TypeScript class
+    bool GetTypeScriptClass() { return typescriptClass_; }
+
+    SharedPtr<JSComponent> CreateJSComponent();
     bool PushModule();
 
 private:
@@ -62,6 +65,7 @@ private:
     bool InitModule();
 
     bool scriptClass_;
+    bool typescriptClass_;
 
 };
 

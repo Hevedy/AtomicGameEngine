@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,7 @@
 
 #include "../Core/Context.h"
 #include "../Core/Main.h"
-#include "../Core/Object.h"
+#include "../Engine/Engine.h"
 
 namespace Atomic
 {
@@ -34,7 +34,7 @@ class Engine;
 /// Base class for creating applications which initialize the Urho3D engine and run a main loop until exited.
 class ATOMIC_API Application : public Object
 {
-    OBJECT(Application);
+    ATOMIC_OBJECT(Application, Object);
 
 public:
     /// Construct. Parse default engine parameters from the command line, and create the engine in an uninitialized state.
@@ -54,11 +54,18 @@ public:
     /// Show an error message (last log message if empty), terminate the main loop, and set failure exit code.
     void ErrorExit(const String& message = String::EMPTY);
 
+    // ATOMIC BEGIN
+
+    static bool GetAutoMetrics() { return autoMetrics_;  }
+    static void SetAutoMetrics(bool value) { autoMetrics_ = value;  }
+
+    // ATOMIC END
+
 protected:
     /// Handle log message.
     void HandleLogMessage(StringHash eventType, VariantMap& eventData);
-    
-    /// Atomic engine.
+
+    /// Urho3D engine.
     SharedPtr<Engine> engine_;
     /// Engine parameters map.
     VariantMap engineParameters_;
@@ -66,28 +73,34 @@ protected:
     String startupErrors_;
     /// Application exit code.
     int exitCode_;
+
+    // ATOMIC BEGIN
+
+    static bool autoMetrics_;
+
+    // ATOMIC END
 };
 
 // Macro for defining a main function which creates a Context and the application, then runs it
 #ifndef IOS
-#define DEFINE_APPLICATION_MAIN(className) \
+#define ATOMIC_DEFINE_APPLICATION_MAIN(className) \
 int RunApplication() \
 { \
     Atomic::SharedPtr<Atomic::Context> context(new Atomic::Context()); \
     Atomic::SharedPtr<className> application(new className(context)); \
     return application->Run(); \
 } \
-DEFINE_MAIN(RunApplication());
+ATOMIC_DEFINE_MAIN(RunApplication());
 #else
 // On iOS we will let this function exit, so do not hold the context and application in SharedPtr's
-#define DEFINE_APPLICATION_MAIN(className) \
+#define ATOMIC_DEFINE_APPLICATION_MAIN(className) \
 int RunApplication() \
 { \
     Atomic::Context* context = new Atomic::Context(); \
     className* application = new className(context); \
     return application->Run(); \
 } \
-DEFINE_MAIN(RunApplication());
+ATOMIC_DEFINE_MAIN(RunApplication());
 #endif
 
 }

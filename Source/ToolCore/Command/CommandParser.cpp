@@ -23,13 +23,14 @@
 #include "CommandParser.h"
 
 #include "NewProjectCmd.h"
-#include "PlatformAddCmd.h"
 #include "BuildCmd.h"
 #include "ImportCmd.h"
 #include "PlayCmd.h"
 #include "EditCmd.h"
 #include "BindCmd.h"
-#include "NETProjectGenCmd.h"
+#include "NETCmd.h"
+#include "ProjectCmd.h"
+#include "CacheCmd.h"
 
 namespace ToolCore
 {
@@ -62,10 +63,6 @@ Command* CommandParser::Parse(const Vector<String>& arguments)
             {
                 cmd = new BuildCmd(context_);
             }
-            else if (argument == "platform-add")
-            {
-                cmd = new PlatformAddCmd(context_);
-            }
             else if (argument == "import")
             {
                 cmd = new ImportCmd(context_);
@@ -82,9 +79,17 @@ Command* CommandParser::Parse(const Vector<String>& arguments)
             {
                 cmd = new BindCmd(context_);
             }
-            else if (argument == "net-projectgen")
+            else if (argument == "net")
             {
-                cmd = new NETProjectGenCmd(context_);
+                cmd = new NETCmd(context_);
+            }
+            else if (argument == "project")
+            {
+                cmd = new ProjectCmd(context_);
+            }
+            else if (argument == "cache")
+            {
+                cmd = new CacheCmd(context_);
             }
 
         }

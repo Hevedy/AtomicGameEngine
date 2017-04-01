@@ -31,7 +31,7 @@ class Project;
 
 class BuildWeb : public BuildBase
 {
-    OBJECT(BuildWeb);
+    ATOMIC_OBJECT(BuildWeb, BuildBase);
 
 public:
 
@@ -46,7 +46,8 @@ protected:
 
     void Initialize();
 
-
+    bool ReadReplace ( String infile, String outfile, String title, String width, String height );
+ 
 };
 
 }

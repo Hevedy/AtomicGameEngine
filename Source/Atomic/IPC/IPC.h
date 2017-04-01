@@ -43,7 +43,7 @@ struct QueuedEvent
 
 class IPC : public Object
 {
-    OBJECT(IPC);
+    ATOMIC_OBJECT(IPC, Object);
 
 public:
 
@@ -51,6 +51,9 @@ public:
     IPC(Context* context);
     /// Destruct.
     virtual ~IPC();
+
+    // Shutdown IPC subsystem, requests any brokers to exit
+    void Shutdown();
 
     // queues an event from a worker or broker receiving thread
     void QueueEvent(unsigned id, StringHash eventType, VariantMap& eventData);
@@ -64,6 +67,9 @@ public:
     // worker -> broker
     void SendEventToBroker(StringHash eventType);
     void SendEventToBroker(StringHash eventType, VariantMap& eventData);
+
+    // Processes arg strings looking for ipc server/client handles, returns true if an IPC subprocess
+    static bool ProcessArguments(const Vector<String>& arguments, int& id, IPCHandle& fd1, IPCHandle& fd2);
 
 #ifdef ATOMIC_PLATFORM_WINDOWS
     IPCHandle GetJobHandle() const { return jobHandle_; }

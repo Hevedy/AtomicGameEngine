@@ -71,7 +71,7 @@ public:
         return nvisitor(name);
     }
 
-    JSBType* processTypeConversion(Type* type)
+    JSBType* processTypeConversion(Type* type, FullySpecifiedType fst)
     {
         JSBType* jtype = NULL;
 
@@ -92,18 +92,51 @@ public:
             if (classname.StartsWith("Atomic::"))
                 classname.Replace("Atomic::", "");
 
-            if (classname == "Vector")
+            if (classname == "VariantVector")
             {
-                if (ntype->name()->asTemplateNameId())
+                JSBClass* jclass = JSBPackage::GetClassAllPackages("ScriptVariant");
+                assert(jclass);
+
+                jtype = new JSBVectorType(new JSBClassType(jclass), false, true);
+
+            }
+            else if (classname == "Vector" || classname == "PODVector")
+            {
+                PODVector<TemplateType> types;
+                unwrapTemplateType(fst, types);
+
+                if (types.Size() == 2)
                 {
-                    const TemplateNameId* tnid = ntype->name()->asTemplateNameId();
-                    FullySpecifiedType pfst = tnid->templateArgumentAt(0);
-                    JSBType* vtype = processTypeConversion(pfst.type());
+                    JSBType* vtype = processTypeConversion((Type*) types[1].type_, types[1].fstype_);
+
                     if (vtype)
                     {
-                        jtype = new JSBVectorType(vtype);
+                        jtype = new JSBVectorType(vtype, classname == "PODVector");
                     }
+
                 }
+                else if (types.Size() == 3 && ( getNameString(types[1].name_) == "SharedPtr" || getNameString(types[1].name_) == "WeakPtr"))
+                {
+                    JSBType* vtype = processTypeConversion((Type*) types[2].type_, types[2].fstype_);
+
+                    if (vtype)
+                    {
+                        JSBVectorType* jvtype = new JSBVectorType(vtype, classname == "PODVector");
+
+                        if (getNameString(types[1].name_) == "SharedPtr")
+                        {
+                            jvtype->vectorTypeIsSharedPtr_ = true;
+                        }
+                        else if (getNameString(types[1].name_) == "WeakPtr")
+                        {
+                            jvtype->vectorTypeIsWeakPtr_ = true;
+                        }
+
+                        jtype = jvtype;
+                    }
+
+                }
+
             }
             else if (classname == "String")
             {
@@ -119,7 +152,7 @@ public:
             }
             else
             {
-                JSBClass* jclass = JSBPackage::GetClassAllPackages(classname);
+                JSBClass* jclass = JSBPackage::GetClassAllPackages(classname, true);
 
                 if (jclass)
                     jtype = new JSBClassType(jclass);
@@ -141,6 +174,71 @@ public:
 
         return jtype;
 
+    }
+
+    struct TemplateType
+    {
+        FullySpecifiedType fstype_;
+        bool isPointer_;
+        bool isReference_;
+        const Name* name_;
+        const Type* type_;
+
+        static void Init(TemplateType& ttype)
+        {
+            ttype.isPointer_ = false;
+            ttype.isReference_ = false;
+            ttype.name_ = 0;
+            ttype.type_ = 0;
+        }
+    };
+
+    bool unwrapTemplateType(const FullySpecifiedType& fstype, PODVector<TemplateType>& types)
+    {
+        TemplateType ttype;
+
+        TemplateType::Init(ttype);
+
+        ttype.fstype_ = fstype;
+        ttype.type_ = fstype.type();
+
+        if (ttype.type_->isPointerType())
+        {
+            ttype.isPointer_=true;
+            FullySpecifiedType pfst = ttype.type_->asPointerType()->elementType();
+            ttype.type_ = pfst.type();
+        }
+
+        if (ttype.type_->isReferenceType())
+        {
+            ttype.isReference_=true;
+            FullySpecifiedType pfst = ttype.type_->asReferenceType()->elementType();
+            ttype.type_ = pfst.type();
+        }
+
+        const NamedType* ntype = ttype.type_->asNamedType();
+
+        if (!ntype)
+            return false;
+
+        if (ntype->name()->asTemplateNameId())
+        {
+            const TemplateNameId* tnid = ntype->name()->asTemplateNameId();
+
+            ttype.name_ = tnid->identifier()->asNameId();
+
+            types.Push(ttype);
+
+            unwrapTemplateType(tnid->templateArgumentAt(0), types);
+
+            return true;
+        }
+
+        ttype.name_ = ntype->name();
+
+        types.Push(ttype);
+
+        return false;
     }
 
     JSBFunctionType* processFunctionType(FullySpecifiedType fst, bool retType = false)
@@ -173,14 +271,18 @@ public:
             if (type->isNamedType())
             {
                 NamedType* ntype = type->asNamedType();
+
                 if (ntype->name()->asTemplateNameId())
                 {
-                    const TemplateNameId* tnid = ntype->name()->asTemplateNameId();
-                    String classname = getNameString(tnid->identifier()->asNameId());
-                    if (classname == "SharedPtr")
+                    PODVector<TemplateType> types;
+                    unwrapTemplateType(fst, types);
+
+                    String classname = getNameString(types[0].name_);
+
+                    // SharedPtr
+                    if ( classname == "SharedPtr" && types.Size() == 2 )
                     {
-                        FullySpecifiedType pfst = tnid->templateArgumentAt(0);
-                        type = pfst.type();
+                        type = (Type*) types[1].type_;
                         isTemplate = true;
                         isSharedPtr = true;
                     }
@@ -200,17 +302,18 @@ public:
 
         if (!jtype)
         {
-            jtype = processTypeConversion(type);
+            jtype = processTypeConversion(type, fst);
+
+            // explicit script string -> StringHash required
+            if (jtype && jtype->asStringHashType())
+                isReference = false;
+
             if (fst.isUnsigned() && jtype->asPrimitiveType())
                 jtype->asPrimitiveType()->isUnsigned_ = true;
 
         }
 
         if (!jtype)
-            return NULL;
-
-        // read only vectors atm
-        if (!isConst && jtype->asVectorType())
             return NULL;
 
         bool skip = false;
@@ -228,6 +331,10 @@ public:
             if (skip)
                 return NULL;
         }
+
+        // We don't support pointers to Vector2/Vector3/etc which are generally out values 
+        if (isPointer && jtype->asClassType() && jtype->asClassType()->class_->IsNumberArray())
+            return NULL;
 
         JSBFunctionType* ftype = new JSBFunctionType(jtype);
         ftype->isPointer_ = isPointer;
@@ -268,6 +375,69 @@ public:
             return NULL;
 
         return jtype;
+
+    }
+
+    String parseDocString(int commentLine) const
+    {
+        const char* comment = NULL;
+        for (unsigned i = 0; i < unit_->commentCount(); i++)
+        {
+            const Token &tcomment = unit_->commentAt(i);
+            unsigned line;
+            unit_->getPosition(tcomment.utf16charsEnd(), &line);
+
+            if (line ==  commentLine)
+            {
+                comment = unit_->firstSourceChar() + tcomment.byteOffset;
+                break;
+            }
+        }
+
+        String docString;
+
+        if (comment && strlen(comment) > 3)
+        {
+            if (comment[0] == '/' && comment[1] == '/' && comment[2] == '/')
+            {
+                int index = 3;
+                while(comment[index] && comment[index] != '\n' && comment[index] != '\r')
+                {
+                    docString += comment[index++];
+                }
+
+            }
+
+            if (comment[0] == '/' && comment[1] == '*' && comment[2] == '*')
+            {
+                int index = 3;
+                bool foundStar = false;
+                while(comment[index])
+                {
+                    // did we find a star in the last loop?
+                    if (foundStar)
+                    {
+                        // We have a an end of block indicator, let's break
+                        if (comment[index] == '/' && foundStar)
+                            break;
+
+                        // This is just a star in the comment, not an end of comment indicator.  Let's keep it
+                        docString += '*';
+                    }
+
+                    foundStar = comment[index] == '*';
+
+                    if (!foundStar)
+                        docString += comment[index];
+
+                    index++;
+                }
+            }
+
+        }
+
+        return docString;
+
 
     }
 
@@ -315,13 +485,29 @@ public:
             for (unsigned i = 0; i < function->argumentCount(); i++)
             {
                 Symbol* symbol = function->argumentAt(i);
+
                 if (symbol->isArgument())
                 {
                     Argument* arg = symbol->asArgument();
 
                     JSBFunctionType* ftype = processFunctionArgType(arg);
+
+                    // TODO: expose interfaces to TS
+                    if (ftype && ftype->type_->asClassType() && ftype->type_->asClassType()->class_->IsInterface())
+                    {
+                        jfunction->SetSkipLanguage(BINDINGLANGUAGE_JAVASCRIPT);
+                    }
+
                     if (!ftype)
-                        return NULL;
+                    {
+                        // if we don't have an initializer, the function cannot be bound
+                        // as unscriptable type
+                        if (!arg->hasInitializer())
+                            return NULL;
+
+                        // otherwise, break and the optional args will be ignored
+                        break;
+                    }
 
                     if (arg->hasInitializer())
                     {
@@ -348,64 +534,11 @@ public:
         jfunction->sourceColumn_ = function->column();
         //const Token &token = unit_->tokenAt(function->sourceLocation());
         //const char* source = unit_->firstSourceChar() + token.byteOffset;
-        const char* comment = NULL;
-        for (unsigned i = 0; i < unit_->commentCount(); i++)
-        {
-            const Token &tcomment = unit_->commentAt(i);
-            unsigned line;
-            unit_->getPosition(tcomment.utf16charsEnd(), &line);
 
-            if (line ==  function->line() - 1)
-            {
-                comment = unit_->firstSourceChar() + tcomment.byteOffset;
-                break;
-            }
-        }
+        String docString = parseDocString(function->line() - 1);
 
-        if (comment && strlen(comment) > 3)
-        {
-            if (comment[0] == '/' && comment[1] == '/' && comment[2] == '/')
-            {
-                int index = 3;
-                while(comment[index] && comment[index] != '\n' && comment[index] != '\r')
-                {
-                    String docString = jfunction->GetDocString();
-                    docString += comment[index++];
-                    jfunction->SetDocString(docString);
-                }
-
-            }
-
-            if (comment[0] == '/' && comment[1] == '*' && comment[2] == '*')
-            {
-                int index = 3;
-                bool foundStar = false;
-                String docString = jfunction->GetDocString();
-                while(comment[index])
-                {
-                    // did we find a star in the last loop?
-                    if (foundStar)
-                    {
-                        // We have a an end of block indicator, let's break
-                        if (comment[index] == '/' && foundStar)
-                            break;
-
-                        // This is just a star in the comment, not an end of comment indicator.  Let's keep it
-                        docString += '*';
-                    }
-                    
-                    foundStar = comment[index] == '*';
-
-                    if (!foundStar)
-                        docString += comment[index];
-
-                    index++;
-                }
-                jfunction->SetDocString(docString);
-            }
-
-        }
-
+        if (docString.Length())
+            jfunction->SetDocString(docString);
 
         return jfunction;
 
@@ -443,6 +576,24 @@ public:
 
         Type* type = dtype.type();
 
+        if (type->isNamedType())
+        {
+            String classname = getNameString(type->asNamedType()->name());
+            if ( dtype.isConst() && classname == "String" )  // find a const string
+            {
+                const StringLiteral* sinit = decl->getInitializer();
+                if (sinit)
+                {
+                    if (sinit->chars())
+                    {
+                        String svalue = sinit->chars();
+                        module_->RegisterConstant(getNameString(decl->name()).CString(), svalue, JSBPrimitiveType::Char );
+                        return true;  // tag this constant as a Char type, because there is no String Primitive type
+                   }
+                }
+            }
+        }
+
         if (type->isPointerType() || type->isReferenceType())
             return true;
 
@@ -469,13 +620,16 @@ public:
                 value = init->chars();
         }
 
-        if (type->isIntegerType() || _unsigned)
+        if (dtype.isConst())
         {
-            module_->RegisterConstant(getNameString(decl->name()).CString(), value, JSBPrimitiveType::Int, _unsigned);
-        }
-        else
-        {
-            module_->RegisterConstant(getNameString(decl->name()).CString(), value, JSBPrimitiveType::Float);
+            if (type->isIntegerType() || _unsigned)
+            {
+                module_->RegisterConstant(getNameString(decl->name()).CString(), value, JSBPrimitiveType::Int, _unsigned);
+            }
+            else
+            {
+                module_->RegisterConstant(getNameString(decl->name()).CString(), value, JSBPrimitiveType::Float);
+            }
         }
 
         return true;
@@ -486,7 +640,7 @@ public:
     {
         String name = getNameString(klass->name());
 
-        JSBClass* jclass = module_->GetClass(name);
+        JSBClass* jclass = module_->GetClass(name, true);
 
         if (!jclass)
         {
@@ -494,6 +648,10 @@ public:
         }
 
         jclass->SetHeader(header_);
+
+        String docString = parseDocString(klass->line() - 1);
+        if (docString.Length())
+            jclass->SetDocString(docString);
 
         for (unsigned i = 0; i < klass->baseClassCount(); i++)
         {
@@ -504,7 +662,19 @@ public:
 
             if (!base)
             {
-                LOGINFOF("Warning: %s baseclass %s not in bindings", name.CString(), baseclassname.CString());
+                JSBClass* interface = JSBPackage::GetClassAllPackages(baseclassname, true);
+
+                if (interface)
+                {
+                    jclass->AddInterface(interface);
+                }
+                else
+                {
+                    if (!i)
+                    {
+                        ATOMIC_LOGINFOF("Warning: %s first baseclass %s not in bindings", name.CString(), baseclassname.CString());
+                    }
+                }
             }
             else
             {

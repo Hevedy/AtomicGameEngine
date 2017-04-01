@@ -39,17 +39,14 @@ namespace ToolCore
 
 class ToolEnvironment : public Object
 {
-    OBJECT(ToolEnvironment)
+    ATOMIC_OBJECT(ToolEnvironment, Object)
 
 public:
 
     ToolEnvironment(Context* context);
     virtual ~ToolEnvironment();
 
-    bool InitFromPackage();
-
-    // dev build init env from json
-    bool InitFromJSON(bool atomicTool = false);
+    bool Initialize(bool cli = false);
 
     /// Root source and build directories for development source tree builds
     void SetRootSourceDir(const String& sourceDir);
@@ -72,18 +69,20 @@ public:
     const String& GetPlayerDataDir() { return resourcePlayerDataDir_; }
     const String& GetEditorDataDir() { return resourceEditorDataDir_; }
 
-    /// AtomicNET
-    const String& GetNETCoreCLRAbsPath() { return netCoreCLRAbsPath_; }
-    const String& GetNETAssemblyLoadPaths() { return netAssemblyLoadPaths_; }
-    const String& GetNETTPAPaths() { return netTPAPaths_; }
-    const String& GetAtomicNETEngineAssemblyPath() { return netAtomicNETEngineAssemblyPath_; }
-
     /// Data directories
     const String& GetDeploymentDataDir() { return toolBinary_; }
 
     const String& GetToolDataDir() { return toolDataDir_; }
 
-    const String& GetDevConfigFilename();
+    // Returns true if we running from a command line tool (aka: AtomicTool)
+    bool GetCLI() { return cli_; }
+
+    // AtomicNET
+
+    const String& GetAtomicNETRootDir() { return atomicNETRootDir_; }
+    const String& GetAtomicNETCoreAssemblyDir() { return atomicNETCoreAssemblyDir_; }
+    const String& GetAtomicNETNuGetBinary() { return atomicNETNuGetBinary_; }
+    const String& GetMonoExecutableDir() { return monoExecutableDir_; }
 
     // OSX
     const String& GetPlayerAppFolder() { return playerAppFolder_; }
@@ -93,7 +92,14 @@ public:
 
     void Dump();
 
+    static void SetBootstrapping() { bootstrapping_ = true; }
+
 private:
+
+    bool InitFromDistribution();
+
+    // Whether we are running from a command line tool, such as AtomicTool
+    bool cli_;
 
     // root source directory (for development builds)
     String rootSourceDir_;
@@ -114,12 +120,6 @@ private:
     String toolBinary_;
 
     String toolDataDir_;
-
-    // AtomicNET
-    String netCoreCLRAbsPath_;
-    String netAssemblyLoadPaths_;
-    String netTPAPaths_;
-    String netAtomicNETEngineAssemblyPath_;
 
     // resources
     String resourceCoreDataDir_;
@@ -142,9 +142,15 @@ private:
     String iosBuildDir_;
     String webBuildDir_;
 
-    String devConfigFilename_;
+    // AtomicNET
+    String atomicNETRootDir_;
+    String atomicNETCoreAssemblyDir_;
+    String atomicNETNuGetBinary_;
+    String monoExecutableDir_;
 
     SharedPtr<ToolPrefs> toolPrefs_;
+
+    static bool bootstrapping_;
 };
 
 }

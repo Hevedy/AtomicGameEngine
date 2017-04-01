@@ -39,12 +39,13 @@ enum PlatformID
     PLATFORMID_MAC,
     PLATFORMID_ANDROID,
     PLATFORMID_IOS,
-    PLATFORMID_WEB
+    PLATFORMID_WEB,
+    PLATFORMID_LINUX
 };
 
 class Platform : public Object
 {
-    OBJECT(Platform);
+    ATOMIC_OBJECT(Platform, Object);
 
 public:
 

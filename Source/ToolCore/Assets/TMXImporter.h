@@ -29,7 +29,7 @@ namespace ToolCore
 
 class TMXImporter : public AssetImporter
 {
-    OBJECT(TMXImporter);
+    ATOMIC_OBJECT(TMXImporter, AssetImporter);
 
 public:
     /// Construct.
@@ -37,6 +37,7 @@ public:
     virtual ~TMXImporter();
 
     virtual void SetDefaults();
+    Resource* GetResource(const String& typeName);
 
 protected:
 

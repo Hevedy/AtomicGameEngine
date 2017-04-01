@@ -1,85 +1,171 @@
 TypeScript is authored by:
-
+* Abubaker Bashir
 * Adam Freidin
-* Ahmad Farid 
+* Adi Dahiya
+* Ahmad Farid
+* Alex Eagle
+* Alexander Kuvaev
+* Alexander Rusakov 
+* Anatoly Ressin 
 * Anders Hejlsberg
+* Andrej Baran 
+* Andrew Z Allen
+* Andy Hanson
+* Anil Anar
+* Anton Tolmachev
 * Arnav Singh
 * Arthur Ozga
-* Basarat Ali Syed 
+* Asad Saeeduddin
+* Avery Morin
+* Basarat Ali Syed
 * Ben Duffield
-* Bill Ticehurst 
+* Ben Mosher 
+* Bill Ticehurst
+* Blake Embrey
+* @bootstraponline
+* Bowden Kelly
 * Brett Mayen
-* Bryan Forbes 
-* Caitlin Potter 
+* Bryan Forbes
+* Caitlin Potter
 * Chris Bubernak
-* Colby Russell 
+* Christophe Vidal 
+* Chuck Jazdzewski
+* Colby Russell
 * Colin Snover
 * Cyrus Najmabadi
-* Dan Quirk 
+* Dafrok Zhang
+* Dan Corder
+* Dan Quirk
 * Daniel Rosenwasser
-* David Li 
+* David Li
+* David Souther
 * Denis Nedelyaev
 * Dick van den Brink
 * Dirk Bäumer
+* Dirk Holtwick
+* Dom Chen 
+* Doug Ilijev
+* Eric Tsang
+* Erik Edrosa
+* Ethan Rubio
+* Evan Martin
+* Evan Sebastian
 * Eyas Sharaiha
-* Frank Wallis 
+* Fabian Cook 
+* @falsandtru
+* Frank Wallis
+* František Žiacik
+* Gabe Moothart 
 * Gabriel Isenberg
-* Gilad Peleg 
+* Gilad Peleg
+* Godfrey Chan 
 * Graeme Wicksted
-* Guillaume Salles 
+* Guillaume Salles
+* Guy Bedford
 * Harald Niesche
+* Herrington Darkholme
+* Iain Monro
 * Ingvar Stepanyan
-* Ivo Gabe de Wolff 
-* James Whitney 
+* Isiah Meadows
+* Ivo Gabe de Wolff
+* Jakub Młokosiewicz 
+* James Whitney
 * Jason Freeman
-* Jason Ramsay 
+* Jason Killian
+* Jason Ramsay
+* JBerger
 * Jed Mao
-* Johannes Rieken 
+* Jeffrey Morlan
+* Jesse Schalken
+* Jiri Tobisek
+* Johannes Rieken
 * John Vilk
 * Jonathan Bond-Caron
 * Jonathan Park
+* Jonathan Toland
 * Jonathan Turner
+* Josh Abernathy 
 * Josh Kalderimis
+* Josh Soref
+* Juan Luis Boya García
 * Julian Williams
+* Justin Bay 
+* Justin Johansson 
 * Kagami Sascha Rosylight
+* Kanchalai Tanglertsampan
 * Keith Mashinter
 * Ken Howard
 * Kenji Imamula
-* Lorant Pinter 
-* Martin Všetička
+* Kevin Lang 
+* Kyle Kelley
+* Lorant Pinter
+* Lucien Greathouse
+* Lukas Elmer 
+* Marin Marinov
+* Martin Vseticka
 * Masahiro Wakame
+* Matt McCutchen
 * Max Deepfield
-* Micah Zoltu 
-* Mohamed Hegazy 
+* Micah Zoltu
+* Michael 
+* Mohamed Hegazy
 * Nathan Shively-Sanders
+* Nathan Yee
+* Nima Zahedi
+* Noah Chen 
+* Noj Vek
 * Oleg Mihailik
-* Oleksandr Chekhovskyi 
-* Paul van Brenk 
-* Pedro Maltez 
+* Oleksandr Chekhovskyi
+* Omer Sheikh 
+* Oskar Segersva¨rd
+* Patrick Zhong
+* Paul van Brenk
+* @pcbro
+* Pedro Maltez
 * Philip Bulley
-* piloopin
+* Piero Cangianiello
+* @piloopin
+* Prayag Verma
 * @progre
 * Punya Biswal
-* Ron Buckton 
-* Ryan Cavanaugh 
+* Rado Kirov
+* Richard Knoll
+* Ron Buckton
+* Rostislav Galimsky 
+* Rowan Wyborn
+* Ryan Cavanaugh
 * Ryohei Ikegami
-* Sébastien Arod
+* Sam El-Husseini 
+* Sarangan Rajamanickam
+* Sergey Shandar 
 * Sheetal Nandi
 * Shengping Zhong
 * Shyyko Serhiy
 * Simon Hürlimann
+* Slawomir Sadziak 
 * Solal Pirelli
 * Stan Thomas
+* Stanislav Sysoev
 * Steve Lucco
+* Sudheesh Singanamalla 
+* Sébastien Arod
+* @T18970237136
+* Tarik Ozket
+* Tetsuharu Ohzeki
 * Tien Hoanhtien
+* Tim Perry
+* Tim Viiding-Spader
 * Tingan Ho
+* Todd Thomson
 * togru
 * Tomas Grubliauskas
+* Torben Fitschen 
 * TruongSinh Tran-Nguyen
-* Viliv Vane
+* Vilic Vane
 * Vladimir Matveev
 * Wesley Wigham
 * York Yao
-* Yui Tanglertsampan
-* Zev Spitz 
+* @yortus
+* Yuichi Nukiyama
+* Zev Spitz
 * Zhengbo Li

@@ -53,16 +53,16 @@ enum WebRequestState
 
 struct WebRequestInternalState;
 
-/// An HTTP connection with response data stream.
+/// An HTTP(S) connection with response data stream that uses curl internally
 class WebRequest : public Object
 {
     friend class Web;
 
-    OBJECT(WebRequest)
+    ATOMIC_OBJECT(WebRequest, Object)
 
 public:
     /// Construct with parameters.
-    WebRequest(Context* context, const String& verb, const String& url, double requestContentSize);
+    WebRequest(Context* context, const String& verb, const String& url, double requestContentSize = 0.0);
     /// Destruct. Release the connection.
     ~WebRequest();
 
@@ -82,7 +82,7 @@ public:
     /// Return whether connection is in the open state.
     bool IsOpen() const { return GetState() == HTTP_OPEN; }
 
-    /// Return whether "download_chunk" event will be fired or if only "complete" will be.
+    /// Return whether E_WEBREQUESTDOWNLOADCHUNK event will be fired or if only E_WEBREQUESTCOMPLETE will be.
     bool HasDownloadChunkEvent();
 
     /// Set an HTTP request header (only works before Send has been called).
@@ -95,6 +95,12 @@ public:
     String GetResponseHeader(const String& header);
     /// Get all HTTP response headers. Using GetResponseHeaderKeys() and GetResponseHeader() is more efficient than using this function.
     String GetAllResponseHeaders();
+
+    /// Set post data for request
+    void SetPostData(const String& postData);
+
+    /// Get the request response as a string
+    const String& GetResponse();
 
 private:
 #ifndef EMSCRIPTEN

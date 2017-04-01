@@ -21,6 +21,7 @@
 //
 
 import EditorUI = require("../ui/EditorUI");
+import Preferences = require("editor/Preferences");
 
 class EditorLicense extends Atomic.ScriptObject {
 
@@ -28,22 +29,8 @@ class EditorLicense extends Atomic.ScriptObject {
 
         super();
 
-        this.subscribeToEvent("LicenseEulaRequired", (eventData) => this.handleLicenseEulaRequired(eventData));
-        this.subscribeToEvent("LicenseActivationRequired", (eventData) => this.handleLicenseActivationRequired(eventData));
-        this.subscribeToEvent("LicenseSuccess", (eventData) => this.handleLicenseSuccess(eventData));
-
-        this.subscribeToEvent("IPCMessage", (eventData:Atomic.IPCMessageEvent) => this.handleIPCMessage(eventData));
-
-    }
-
-    handleIPCMessage(eventData:Atomic.IPCMessageEvent) {
-
-      if (eventData.message == "3D Module License Required") {
-
-        var ops = EditorUI.getModelOps();
-        ops.showPro3DWindow();
-
-      }
+        this.subscribeToEvent(ToolCore.LicenseEulaRequiredEvent((eventData) => this.handleLicenseEulaRequired(eventData)));
+        this.subscribeToEvent(ToolCore.LicenseEulaAcceptedEvent((eventData) => this.handleLicenseEulaAccepted(eventData)));
 
     }
 
@@ -54,15 +41,18 @@ class EditorLicense extends Atomic.ScriptObject {
 
     }
 
-    handleLicenseActivationRequired(eventData) {
+    handleLicenseEulaAccepted(eventData) {
+
+        if (!Atomic.AtomicBuildInfo.getDistBuild())
+            return;
+
+        var sha = Atomic.AtomicBuildInfo.getGitSHA();
+
+        if (sha == "Unversioned Build" || Preferences.getInstance().editorBuildData.lastEditorBuildSHA == sha)
+            return;
 
         var ops = EditorUI.getModelOps();
-        ops.showActivationWindow();
-
-    }
-
-    handleLicenseSuccess(eventData) {
-
+        ops.showNewBuildWindow();
 
     }
 

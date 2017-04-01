@@ -51,7 +51,7 @@ class SerializableEditType {
                 value = object.getAttribute(attrInfo.name);
                 if (index >= 0) {
 
-                    if (attrInfo.type == Atomic.VAR_RESOURCEREFLIST) {
+                    if (attrInfo.type == Atomic.VariantType.VAR_RESOURCEREFLIST) {
 
                         value = value.resources[index];
 
@@ -64,7 +64,7 @@ class SerializableEditType {
 
                 var value2 = object.getAttribute(attrInfo.name);
                 if (index >= 0) {
-                    if (attrInfo.type == Atomic.VAR_RESOURCEREFLIST) {
+                    if (attrInfo.type == Atomic.VariantType.VAR_RESOURCEREFLIST) {
 
                         value2 = value2.resources[index];
 
@@ -85,7 +85,13 @@ class SerializableEditType {
 
     }
 
-    onAttributeInfoEdited(attrInfo: Atomic.AttributeInfo, value: any, index: number = -1, genEdit: boolean = true) {
+    /**
+     * Updates selected object attribute on edit, index parameter is for the edit type (for example NumberArrayAttributeEdit)
+     * attrArrayIndex is for setting which array index to set for array AttributeInfo types
+     */
+    onAttributeInfoEdited(attrInfo: Atomic.AttributeInfo, value: any, index: number = -1, genEdit: boolean = true, attrArrayIndex: number = -1) {
+
+        let editTypeName = this.objects.length > 0 ? this.objects[0].typeName : "";
 
         for (var i in this.objects) {
 
@@ -93,23 +99,23 @@ class SerializableEditType {
 
             if (index >= 0) {
 
-                var idxValue = object.getAttribute(attrInfo.name);
+                var idxValue = object.getAttribute(attrInfo.name, attrArrayIndex);
 
-                if (attrInfo.type == Atomic.VAR_RESOURCEREFLIST) {
+                if (attrInfo.type == Atomic.VariantType.VAR_RESOURCEREFLIST) {
 
                     idxValue.resources[index] = value;
-                    object.setAttribute(attrInfo.name, idxValue);
+                    object.setAttribute(attrInfo.name, idxValue, attrArrayIndex);
 
                 } else {
 
                     idxValue[index] = value;
-                    object.setAttribute(attrInfo.name, idxValue);
+                    object.setAttribute(attrInfo.name, idxValue, attrArrayIndex);
 
                 }
 
             } else {
 
-                object.setAttribute(attrInfo.name, value);
+                object.setAttribute(attrInfo.name, value, attrArrayIndex);
 
             }
 
@@ -117,6 +123,25 @@ class SerializableEditType {
 
         if (!genEdit)
             return;
+
+        let scene = this.getEditScene();
+
+        if (scene) {
+
+            scene.sendEvent(Editor.SceneEditEndEventType);
+
+            if (editTypeName != "Node") {
+
+                scene.sendEvent(Editor.ComponentEditEndEventType);
+
+            }
+        }
+
+
+
+    }
+
+    getEditScene():Atomic.Scene {
 
         var node: Atomic.Node = null;
         if (this.nodes.length) {
@@ -126,8 +151,9 @@ class SerializableEditType {
         }
 
         if (node)
-            node.scene.sendEvent("SceneEditEnd");
+            return node.scene;
 
+        return null;
     }
 
     compareTypes(otherType: SerializableEditType, multiSelect:boolean = false): boolean {

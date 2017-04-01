@@ -37,4 +37,45 @@ class MacBuildSettings {
 
 }
 
+class WindowsBuildSettings {   
+    appName: string;
+    packageName: string;
+    companyName: string;
+    productName: string;
+}
+
+class WebBuildSettings {
+    appName: string;
+    pageTheme: number;
+    gameWidth: string;
+    gameHeight: string;
+    faveIconName: string;
+}
+
+class AndroidBuildSettings {
+    appName: string;
+    packageName: string;
+    companyName: string;
+    sDKVersion: string;
+    minSDKVersion: string;
+    activityName: string;
+    iconPath: string;
+}
+
+class IOSBuildSettings {
+    appName: string;
+    packageName: string;
+    companyName: string;
+    productName: string;
+    provisionFile: string;
+    appIDPrefix: string;
+}
+
+class LinuxBuildSettings {
+    appName: string;
+    packageName: string;
+    companyName: string;
+    productName: string;
+}
+
 export = BuildSettings;

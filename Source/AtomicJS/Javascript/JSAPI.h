@@ -28,9 +28,8 @@ typedef void* JS_HEAP_PTR;
 
 #include "../Javascript/JSVM.h"
 
-#define JS_GLOBALSTASH_INDEX_COMPONENTS 0
-#define JS_GLOBALSTASH_INDEX_NODE_REGISTRY 1
-#define JS_GLOBALSTASH_VARIANTMAP_CACHE 2
+#define JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY 0
+#define JS_GLOBALSTASH_VARIANTMAP_CACHE 1
 
 // indexers for instance objects
 #define JS_INSTANCE_INDEX_FINALIZED 0
@@ -55,10 +54,17 @@ void js_class_push_propertyobject(JSVM* vm, const char* package, const char* cla
 void js_class_get_prototype(duk_context* ctx, const char* package, const char *classname);
 void js_class_get_constructor(duk_context* ctx, const char* package, const char *classname);
 
+// setup a native event wrapper on module object at the top of the stack
+void js_define_native_event(duk_context* ctx, const String& eventType, const String& eventName);
+
 /// Pushes variant value or undefined if can't be pushed
-void js_push_variant(duk_context* ctx, const Variant &v);
+void js_push_variant(duk_context* ctx, const Variant &v, int arrayIndex = -1);
 void js_push_variantmap(duk_context* ctx, const VariantMap &vmap);
 
+// Get a default value for the given variant type and set variantOut
+void js_get_default_variant(VariantType variantType, Variant& variantOut);
+
+/// Sets a variant value from the duktape stack
 void js_to_variant(duk_context* ctx, int variantIdx, Variant &v, VariantType variantType = VAR_NONE);
 
 void js_object_to_variantmap(duk_context* ctx, int objIdx, VariantMap &v);

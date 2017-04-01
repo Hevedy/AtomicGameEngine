@@ -21,8 +21,7 @@
 //
 
 import ScriptWidget = require("ui/ScriptWidget");
-import Editor = require("editor/Editor");
-import EditorEvents = require("editor/EditorEvents");
+import {default as AtomicEditor} from "editor/Editor";
 import ProjectFrameMenu = require("./menus/ProjectFrameMenu");
 import MenuItemSources = require("./menus/MenuItemSources");
 import SearchBarFiltering = require("resources/SearchBarFiltering");
@@ -51,7 +50,7 @@ class ProjectFrame extends ScriptWidget {
 
         this.load("AtomicEditor/editor/ui/projectframe.tb.txt");
 
-        this.gravity = Atomic.UI_GRAVITY_TOP_BOTTOM;
+        this.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_TOP_BOTTOM;
 
         this.searchEdit = <Atomic.UIEditField>this.getWidget("filter");
 
@@ -68,37 +67,35 @@ class ProjectFrame extends ScriptWidget {
         foldercontainer.addChild(folderList);
 
         // events
-        this.subscribeToEvent("ProjectLoaded", (data) => this.handleProjectLoaded(data));
-        this.subscribeToEvent(EditorEvents.ProjectUnloadedNotification, (data) => this.handleProjectUnloaded(data));
-        this.subscribeToEvent("DragEnded", (data: Atomic.DragEndedEvent) => this.handleDragEnded(data));
+        this.subscribeToEvent(ToolCore.ProjectLoadedEvent((data) => this.handleProjectLoaded(data)));
+        this.subscribeToEvent(Editor.ProjectUnloadedNotificationEvent((data) => this.handleProjectUnloaded(data)));
+        this.subscribeToEvent(Atomic.DragEndedEvent((data: Atomic.DragEndedEvent) => this.handleDragEnded(data)));
 
-        this.subscribeToEvent("ResourceAdded", (ev: ToolCore.ResourceAddedEvent) => this.handleResourceAdded(ev));
-        this.subscribeToEvent("ResourceRemoved", (ev: ToolCore.ResourceRemovedEvent) => this.handleResourceRemoved(ev));
-        this.subscribeToEvent("AssetRenamed", (ev: ToolCore.AssetRenamedEvent) => this.handleAssetRenamed(ev));
-        this.subscribeToEvent(EditorEvents.InspectorProjectReference, (ev: EditorEvents.InspectorProjectReferenceEvent) => { this.handleInspectorProjectReferenceHighlight(ev.path) });
+        this.subscribeToEvent(ToolCore.ResourceAddedEvent((ev: ToolCore.ResourceAddedEvent) => this.handleResourceAdded(ev)));
+        this.subscribeToEvent(ToolCore.ResourceRemovedEvent((ev: ToolCore.ResourceRemovedEvent) => this.handleResourceRemoved(ev)));
+        this.subscribeToEvent(ToolCore.AssetRenamedEvent((ev: ToolCore.AssetRenamedEvent) => this.handleAssetRenamed(ev)));
+        this.subscribeToEvent(Editor.InspectorProjectReferenceEvent((ev: Editor.InspectorProjectReferenceEvent) => { this.handleInspectorProjectReferenceHighlight(ev.path); }));
 
-        folderList.subscribeToEvent("UIListViewSelectionChanged", (event: Atomic.UIListViewSelectionChangedEvent) => this.handleFolderListSelectionChangedEvent(event));
+        this.searchEdit.subscribeToEvent(this.searchEdit, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
+
+        folderList.subscribeToEvent(Atomic.UIListViewSelectionChangedEvent((event: Atomic.UIListViewSelectionChangedEvent) => this.handleFolderListSelectionChangedEvent(event)));
 
         // this.subscribeToEvent(EditorEvents.ResourceFolderCreated, (ev: EditorEvents.ResourceFolderCreatedEvent) => this.handleResourceFolderCreated(ev));
 
         // this uses FileWatcher which doesn't catch subfolder creation
-        this.subscribeToEvent("FileChanged", (data) => {
+        this.subscribeToEvent(Atomic.FileChangedEvent((data) => {
 
             // console.log("File CHANGED! ", data.fileName);
 
-        });
+        }));
 
-        // Activates search while user is typing in search widget
-        this.searchEdit.subscribeToEvent(this.searchEdit, "WidgetEvent", (data) => {
-
-            if (!ToolCore.toolSystem.project) return;
-
-            if (data.type == Atomic.UI_EVENT_TYPE_KEY_UP) {
-                this.search = true;
-                this.refreshContent(this.currentFolder);
+        // Development support for project frame resizing, including hierarchy frame
+        this.subscribeToEvent("DevelopmentUIEvent", (data) => {
+            if (data.subEvent == "ScaleFrameWidth" && data.arg0 == "projectframe") {
+                this.handleScaleWidth(data.arg1);
             }
         });
-
+                
     }
 
     handleAssetRenamed(ev: ToolCore.AssetRenamedEvent) {
@@ -174,7 +171,21 @@ class ProjectFrame extends ScriptWidget {
 
     handleWidgetEvent(data: Atomic.UIWidgetEvent): boolean {
 
-        if (data.type == Atomic.UI_EVENT_TYPE_RIGHT_POINTER_UP) {
+        if (!ToolCore.toolSystem.project) return;
+
+        if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_KEY_UP) {
+
+            // Activates search while user is typing in search widget
+            if (data.target == this.searchEdit) {
+
+                if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_KEY_UP) {
+                    this.search = true;
+                    this.refreshContent(this.currentFolder);
+                }
+            }
+        }
+
+        if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_RIGHT_POINTER_UP) {
 
             var id = data.target.id;
             var db = ToolCore.getAssetDatabase();
@@ -195,7 +206,7 @@ class ProjectFrame extends ScriptWidget {
 
         }
 
-        if (data.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             var id = data.target.id;
 
@@ -255,7 +266,7 @@ class ProjectFrame extends ScriptWidget {
 
                     } else {
 
-                        this.sendEvent(EditorEvents.EditResource, { "path": asset.path });
+                        this.sendEvent(Editor.EditorEditResourceEventData({ "path": asset.path, lineNumber: 0 }));
                     }
 
                 }
@@ -361,7 +372,7 @@ class ProjectFrame extends ScriptWidget {
             else {
                 var destFilename = Atomic.addTrailingSlash(asset.path);
                 destFilename += node.name + ".prefab";
-                var file = new Atomic.File(destFilename, Atomic.FILE_WRITE);
+                var file = new Atomic.File(destFilename, Atomic.FileMode.FILE_WRITE);
                 node.saveXML(file);
                 file.close();
             }
@@ -411,7 +422,13 @@ class ProjectFrame extends ScriptWidget {
 
     }
 
-    handleProjectLoaded(data) {
+    handleScaleWidth(scale:number) {
+        this.getWidget("projectframe").layoutMinWidth = 220 * scale;
+    }
+
+    handleProjectLoaded(data: ToolCore.ProjectLoadedEvent) {
+
+        this.handleScaleWidth(parseFloat(AtomicEditor.instance.getApplicationPreference( "developmentUI", "projectFrameWidthScalar", "1")));
 
         this.folderList.rootList.value = 0;
         this.folderList.setExpanded(this.resourcesID, true);
@@ -420,6 +437,8 @@ class ProjectFrame extends ScriptWidget {
     }
 
     handleProjectUnloaded(data) {
+
+        this.handleScaleWidth(1);
 
         this.folderList.deleteAllItems();
         this.resourceFolder = null;
@@ -465,7 +484,7 @@ class ProjectFrame extends ScriptWidget {
 
         if (this.currentFolder != folder) {
 
-            this.sendEvent(EditorEvents.ContentFolderChanged, { path: folder.path });
+            this.sendEvent(Editor.ContentFolderChangedEventData({ path: folder.path }));
 
         }
 
@@ -524,7 +543,7 @@ class ProjectFrame extends ScriptWidget {
         var blayout = new Atomic.UILayout();
         blayout.id = asset.guid;
 
-        blayout.gravity = Atomic.UI_GRAVITY_LEFT;
+        blayout.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_LEFT;
 
         var spacer = new Atomic.UIWidget();
         spacer.rect = [0, 0, 8, 8];
@@ -556,11 +575,11 @@ class ProjectFrame extends ScriptWidget {
         fd.id = "Vera";
         fd.size = 11;
 
-        button.gravity = Atomic.UI_GRAVITY_LEFT;
+        button.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_LEFT;
 
         var image = new Atomic.UISkinImage(bitmapID);
         image.rect = [0, 0, 12, 12];
-        image.gravity = Atomic.UI_GRAVITY_RIGHT;
+        image.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_RIGHT;
         blayout.addChild(image);
         image["asset"] = asset;
 

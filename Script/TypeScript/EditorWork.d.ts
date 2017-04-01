@@ -8,143 +8,25 @@
 /// <reference path="Atomic.d.ts" />
 /// <reference path="Editor.d.ts" />
 /// <reference path="ToolCore.d.ts" />
+/// <reference path="WebView.d.ts" />
 
-declare module Editor.EditorEvents {
-
-    export interface ModalErrorEvent {
-
-        title: string;
-        message: string;
-
-    }
-
-    export interface PlayerLogEvent {
-
-        message: string;
-        level: number;
-
-    }
-
-    export interface ActiveSceneEditorChangeEvent {
-
-        sceneEditor: Editor.SceneEditor3D;
-
-    }
-
-    export interface SceneClosedEvent {
-
-        scene: Atomic.Scene;
-
-    }
-
-    export interface ContentFolderChangedEvent {
-
-        path: string;
-
-    }
-
-    export interface LoadProjectEvent {
-
-        // The full path to the .atomic file
-        path: string;
-
-    }
-
+declare module Editor.Templates {
+    // Commented out until the TSDoc gets updated to the latest version of TypeScript
+    //export type TemplateType = "component" | "script";
     /**
-     * Called once the resource has been saved
-     * @type {String}
+     * New file defintion
      */
-    export interface SaveResourceEvent {
-
-        // The full path to the resource to save / empty or undefined for current
-        path: string;
-
-    }
-
-    export interface LoadResourceEvent {
-
-        // The full path to the resource to load
-        path: string;
-
-    }
-
-    export interface EditorFileEvent {
+    export interface FileTemplateDefinition {
+        /** name to display in the dropdown */
+        name: string;
+        /** description */
+        desc: string;
+        /** type of template */
+        templateType: string;
+        /** file extension */
+        ext: string;
+        /** file name/path of the source templage file to clone from.  Note, needs to be in the atomic cache */
         filename: string;
-        fileExt: string;
-        editor: any;
-    }
-
-    export interface CodeLoadedEvent extends EditorFileEvent {
-        code: string;
-    }
-
-    export interface CodeSavedEvent extends EditorFileEvent {
-        code: string;
-    }
-
-    export interface EditorCloseResourceEvent {
-
-        editor: Editor.ResourceEditor;
-        navigateToAvailableResource: boolean;
-
-    }
-
-    export interface EditResourceEvent {
-
-        // The full path to the resource to edit
-        path: string;
-
-    }
-
-    /**
-     * Called once the resource has been deleted
-     * @type {String}
-     */
-    export interface DeleteResourceEvent {
-
-        // The full path to the resource to edit
-        path: string;
-
-    }
-
-    /**
-     * Called once the resource has been renamed
-     * @type {String}
-     */
-    export interface RenameResourceEvent {
-
-        /**
-         * Original path of the resource
-         * @type {string}
-         */
-        path: string;
-
-        /**
-         * New path of the resource
-         * @type {string}
-         */
-        newPath: string;
-
-        /**
-         * New base name of the resource (no path or extension)
-         * @type {string}
-         */
-        newName?: string;
-
-        // the asset being changed
-        asset?: ToolCore.Asset;
-    }
-
-    export interface SceneEditStateChangeEvent {
-
-        serializable: Atomic.Serializable;
-
-    }
-
-    export interface PreferencesChangedEvent {
-
-        preferences: any;
-
     }
 }
 
@@ -181,13 +63,21 @@ declare module Editor.Extensions {
          * @param  {any} data
          */
         sendEvent(eventType: string, data: any);
+        sendEvent<T extends Atomic.EventMetaData>(eventType:string, data?:T);
+        sendEvent<T extends Atomic.EventCallbackMetaData>(eventCallbackMetaData:T);
 
         /**
          * Subscribe to an event and provide a callback.  This can be used by services to subscribe to custom events
          * @param  {string} eventType
          * @param  {any} callback
          */
-        subscribeToEvent(eventType, callback);
+        subscribeToEvent?(eventType: string, callback: (...params) => any);
+
+        /**
+         * Subscribe to an event with a pre-wrapped event object.  This can be used by services to subscribe to custom events
+         * @param  {Atomic.EventMetaData} wrappedEvent
+         */
+        subscribeToEvent?(wrappedEvent: Atomic.EventMetaData);
     }
 
     /**
@@ -230,10 +120,12 @@ declare module Editor.Extensions {
         canHandleResource(resourcePath: string) : boolean;
         /**
          * Generates a resource editor for the provided resource type
+         * @param  resourceFrame 
          * @param  resourcePath
          * @param  tabContainer
+         * @param  lineNumber
          */
-        getEditor(resourceFrame: Atomic.UIWidget, resourcePath: string, tabContainer: Atomic.UITabContainer) : Editor.ResourceEditor;
+        getEditor(resourceFrame: Atomic.UIWidget, resourcePath: string, tabContainer: Atomic.UITabContainer, lineNumber: number) : Editor.ResourceEditor;
     }
 }
 
@@ -264,9 +156,22 @@ declare module Editor.HostExtensions {
     }
 
     export interface ResourceServicesEventListener extends Editor.Extensions.ServiceEventListener {
-        save?(ev: EditorEvents.SaveResourceEvent);
-        delete?(ev: EditorEvents.DeleteResourceEvent);
-        rename?(ev: EditorEvents.RenameResourceEvent);
+        /**
+         * Called once a resource is saved
+         */
+        save?(ev: Editor.EditorSaveResourceEvent);
+        /**
+         * Called when a resource is deleted
+         */
+        delete?(ev: Editor.EditorDeleteResourceEvent);
+        /**
+         * Called when a resource is renamed
+         */
+        rename?(ev: Editor.EditorRenameResourceNotificationEvent);
+        /**
+         * Called when a resource is about to be edited
+         */
+        edit?(ev: Editor.EditorEditResourceEvent);
     }
 
     export interface ResourceServicesProvider extends Editor.Extensions.ServicesProvider<ResourceServicesEventListener> {
@@ -275,7 +180,7 @@ declare module Editor.HostExtensions {
 
     export interface ProjectServicesEventListener extends Editor.Extensions.ServiceEventListener {
         projectUnloaded?();
-        projectLoaded?(ev: EditorEvents.LoadProjectEvent);
+        projectLoaded?(ev: Editor.EditorLoadProjectEvent);
         playerStarted?();
     }
     export interface ProjectServicesProvider extends Editor.Extensions.ServicesProvider<ProjectServicesEventListener> {
@@ -292,25 +197,53 @@ declare module Editor.HostExtensions {
         getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: boolean): boolean;
 
         /**
-         * Sets a user preference value in the user settings file
+         * Return a preference value or the provided default from the global user settings file
+         * @param  {string} extensionName name of the section the preference lives under
+         * @param  {string} preferenceName name of the preference to retrieve
+         * @param  {number | boolean | string} defaultValue value to return if pref doesn't exist
+         * @return {number|boolean|string}
+         */
+        getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: number): number;
+        getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: string): string;
+        getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: boolean): boolean;
+
+        /**
+         * Sets a user preference value in the project settings file
          * @param  {string} extensionName name of the extension the preference lives under
          * @param  {string} preferenceName name of the preference to set
          * @param  {number | boolean | string} value value to set
          */
         setUserPreference(extensionName: string, preferenceName: string, value: number | boolean | string);
+
+        /**
+         * Sets an editor preference value in the global editor settings file
+         * @param  {string} groupName name of the section the preference lives under
+         * @param  {string} preferenceName name of the preference to set
+         * @param  {number | boolean | string} value value to set
+         */
+        setApplicationPreference(groupName: string, preferenceName: string, value: number | boolean | string);
     }
 
     export interface SceneServicesEventListener extends Editor.Extensions.ServiceEventListener {
-        activeSceneEditorChanged?(ev: EditorEvents.ActiveSceneEditorChangeEvent);
-        editorSceneClosed?(ev: EditorEvents.SceneClosedEvent);
+        activeSceneEditorChanged?(ev: Editor.EditorActiveSceneEditorChangeEvent);
+        editorSceneClosed?(ev: Editor.EditorSceneClosedEvent);
     }
     export interface SceneServicesProvider extends Editor.Extensions.ServicesProvider<SceneServicesEventListener> { }
 
     export interface UIServicesEventListener extends Editor.Extensions.ServiceEventListener {
         menuItemClicked?(refid: string): boolean;
         projectContextItemClicked?(asset: ToolCore.Asset, refid: string): boolean;
+        projectAssetClicked?(asset: ToolCore.Asset): boolean;
         hierarchyContextItemClicked?(node: Atomic.Node, refid: string): boolean;
+
+        /**
+         * Handle messages that are submitted via Atomic.Query from within a web view editor.
+         * @param message The message type that was submitted to be used to determine what the data contains if present
+         * @param data any additional data that needs to be submitted with the message
+         */
+        handleWebMessage?(messageType: string, data?: any): void;
     }
+
     export interface UIServicesProvider extends Editor.Extensions.ServicesProvider<UIServicesEventListener> {
         createPluginMenuItemSource(id: string, items: any): Atomic.UIMenuItemSource;
         removePluginMenuItemSource(id: string);
@@ -319,9 +252,26 @@ declare module Editor.HostExtensions {
         createProjectContextMenuItemSource(id: string, items: any): Atomic.UIMenuItemSource;
         removeProjectContextMenuItemSource(id: string);
         refreshHierarchyFrame();
+        loadCustomInspector(customInspector: Atomic.UIWidget);
         showModalWindow(windowText: string, uifilename: string, handleWidgetEventCB: (ev: Atomic.UIWidgetEvent) => void): Editor.Modal.ExtensionWindow;
-        showModalError(windowText: string, message: string);
+        showNonModalWindow(windowText: string, uifilename: string, handleWidgetEventCB: (ev: Atomic.UIWidgetEvent) => void): Editor.Modal.ExtensionWindow;
+        showModalError(windowText: string, message: string):Atomic.UIMessageWindow;
         showResourceSelection(windowText: string, importerType: string, resourceType: string, callback: (retObject: any, args: any) => void, args?: any);
+
+        /**
+         * Returns the currently active resource editor or null
+         * @return {Editor.ResourceEditor}
+         */
+        getCurrentResourceEditor(): Editor.ResourceEditor;
+
+        
+        /**
+         * Will load a resource editor or navigate to an already loaded resource editor by path
+         * @param path The path to the resource to load
+         * @param lineNumber optional line number to navigate to
+         * @return {Editor.ResourceEditor}
+         */
+        loadResourceEditor(path: string, lineNumber?: number): Editor.ResourceEditor;
 
         /**
          * Register a custom editor.  These editors will override editors in the standard editor list if
@@ -342,6 +292,56 @@ declare module Editor.HostExtensions {
  */
 declare module Editor.ClientExtensions {
 
+    export interface EditorFileEvent {
+        filename: string;
+        fileExt: string;
+        editor: any;
+    }
+
+    export interface CodeLoadedEvent extends EditorFileEvent {
+        code: string;
+    }
+
+    export interface CodeSavedEvent extends EditorFileEvent {
+        code: string;
+    }
+
+    /**
+     * Called once the resource has been deleted
+     * @type {String}
+     */
+    export interface DeleteResourceEvent {
+
+        // The full path to the resource to edit
+        path: string;
+
+    }
+
+    /**
+     * Called once the resource has been renamed
+     * @type {String}
+     */
+    export interface RenameResourceEvent {
+
+        /**
+         * Original path of the resource
+         * @type {string}
+         */
+        path: string;
+
+        /**
+         * New path of the resource
+         * @type {string}
+         */
+        newPath: string;
+
+        /**
+         * New base name of the resource (no path or extension)
+         * @type {string}
+         */
+        newName?: string;
+    }
+
     /**
      * Generic service locator of editor services that may be injected by either a plugin
      * or by the editor itself.
@@ -361,14 +361,20 @@ declare module Editor.ClientExtensions {
         initialize(serviceLocator: ClientServiceLocator);
     }
 
+    export interface PreferencesChangedEventData {
+        applicationPreferences? : any;
+        projectPreferences? : any;
+    }
+
     export interface WebViewServiceEventListener extends Editor.Extensions.EditorServiceExtension {
-        configureEditor?(ev: EditorEvents.EditorFileEvent);
-        codeLoaded?(ev: EditorEvents.CodeLoadedEvent);
-        save?(ev: EditorEvents.CodeSavedEvent);
-        delete?(ev: EditorEvents.DeleteResourceEvent);
-        rename?(ev: EditorEvents.RenameResourceEvent);
+        configureEditor?(ev: EditorFileEvent);
+        codeLoaded?(ev: CodeLoadedEvent);
+        save?(ev: CodeSavedEvent);
+        delete?(ev: DeleteResourceEvent);
+        rename?(ev: RenameResourceEvent);
         projectUnloaded?();
-        preferencesChanged?();
+        formatCode?();
+        preferencesChanged?(preferences: PreferencesChangedEventData);
     }
 
     /**
@@ -389,7 +395,20 @@ declare module Editor.ClientExtensions {
          * @param  {number | boolean | string} defaultValue value to return if pref doesn't exist
          * @return {number|boolean|string}
          */
-        getUserPreference(extensionName: string, preferenceName: string, defaultValue?: number | boolean | string): number | boolean | string;
+        getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: number): number;
+        getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: string): string;
+        getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: boolean): boolean;
+
+        /**
+         * Return a preference value or the provided default from the application settings file
+         * @param  {string} extensionName name of the extension the preference lives under
+         * @param  {string} preferenceName name of the preference to retrieve
+         * @param  {number | boolean | string} defaultValue value to return if pref doesn't exist
+         * @return {number|boolean|string}
+         */
+        getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: number): number;
+        getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: string): string;
+        getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: boolean): boolean;
     }
 
     export interface AtomicErrorMessage {
@@ -440,5 +459,19 @@ declare module Editor.ClientExtensions {
          * Notify the host that the contents of the editor has changed
          */
         notifyEditorChange();
+
+        /**
+         * This adds a global routine to the window object so that it can be called from the host
+         * @param  {string} routineName
+         * @param  {(} callback
+         */
+        addCustomHostRoutine(routineName: string, callback: (...any) => void);
     }
+}
+
+declare module Editor {
+    /**
+     * Valid editor shortcuts that can be called from menus
+     */
+    export type EditorShortcutType = "cut" | "copy" | "paste" | "undo" | "redo" | "close" | "frameselected" | "selectall";
 }

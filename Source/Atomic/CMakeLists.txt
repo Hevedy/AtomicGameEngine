@@ -1,25 +1,19 @@
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty/WebSocketPP/include
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty/rapidjson/include
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty/libcurl/include
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty/kNet/include
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty/FreeType/include
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty/Box2D
-                    ${CMAKE_SOURCE_DIR}/Source/ThirdParty/ASIO/include)
+include_directories(${ATOMIC_INCLUDE_DIRS})
+include_directories_exported(${CMAKE_CURRENT_SOURCE_DIR})
 
 file (GLOB CONTAINER_SOURCE Container/*.cpp Container/*.h)
 file (GLOB CORE_SOURCE Core/*.cpp Core/*.h)
 file (GLOB MATH_SOURCE Math/*.cpp Math/*.h)
+file (GLOB IO_SOURCE IO/*.cpp IO/*.h)
 file (GLOB ENGINE_SOURCE Engine/*.cpp Engine/*.h)
 file (GLOB INPUT_SOURCE Input/*.cpp Input/*.h)
-file (GLOB IO_SOURCE IO/*.cpp IO/*.h)
 file (GLOB RESOURCE_SOURCE Resource/*.cpp Resource/*.h)
 file (GLOB AUDIO_SOURCE Audio/*.cpp Audio/*.h)
 file (GLOB NETWORK_SOURCE Network/*.cpp Network/*.h)
 file (GLOB WEB_SOURCE Web/*.cpp Web/*.h)
 file (GLOB SCRIPT_SOURCE Script/*.cpp Script/*.h)
+file (GLOB METRICS_SOURCE Metrics/*.cpp Metrics/*.h)
 
 if (NOT EMSCRIPTEN AND NOT IOS AND NOT ANDROID)
   file (GLOB IPC_SOURCE IPC/*.cpp IPC/*.h)
@@ -31,7 +25,6 @@ file (GLOB UI_SOURCE UI/*.cpp UI/*.h)
 file (GLOB SYSTEM_UI_SOURCE UI/SystemUI/*.cpp UI/SystemUI/*.h)
 
 if (NOT ATOMIC_BUILD_2D)
-  file (GLOB ATOMIC3D_SOURCE Atomic3D/*.cpp Atomic3D/*.h)
   file (GLOB PHYSICS_SOURCE Physics/*.cpp Physics/*.h)
   file (GLOB NAVIGATION_SOURCE Navigation/*.cpp Navigation/*.h)
   file (GLOB ENVIRONMENT_SOURCE Environment/*.cpp Environment/*.h)
@@ -40,9 +33,11 @@ endif()
 file (GLOB GRAPHICS_SOURCE Graphics/*.cpp Graphics/*.h)
 
 if (MSVC)
-    if (ATOMIC_D3D11)
+    if (ATOMIC_D3D11) #DirectX 11
       file (GLOB GRAPHICS_IMPL_SOURCE Graphics/Direct3D11/*.cpp Graphics/Direct3D11/*.h)
-    else()
+    elseif (ATOMIC_OPENGL) #OpenGL
+	  file (GLOB GRAPHICS_IMPL_SOURCE Graphics/OpenGL/*.cpp Graphics/OpenGL/*.h)
+	else() #DirectX 9
       file (GLOB GRAPHICS_IMPL_SOURCE Graphics/Direct3D9/*.cpp Graphics/Direct3D9/*.h)
     endif()
 else()
@@ -52,19 +47,11 @@ else()
     file (GLOB GRAPHICS_IMPL_SOURCE Graphics/OpenGL/*.cpp Graphics/OpenGL/*.h)
 endif()
 
-if (ANDROID)
-
-endif()
-
 if (APPLE)
     if (NOT IOS)
         set (PLATFORM_SOURCE IO/MacFileWatcher.mm UI/UIDragDropMac.mm)
     else()
     endif()
-endif()
-
-if (EMSCRIPTEN)
-
 endif()
 
 set (SOURCE_FILES ${CONTAINER_SOURCE} ${CORE_SOURCE} ${ENGINE_SOURCE} ${INPUT_SOURCE}
@@ -74,7 +61,7 @@ set (SOURCE_FILES ${CONTAINER_SOURCE} ${CORE_SOURCE} ${ENGINE_SOURCE} ${INPUT_SO
                   ${ATOMIC3D_SOURCE}
                   ${ATOMIC2D_SOURCE} ${ENVIRONMENT_SOURCE}
                   ${SCENE_SOURCE} ${UI_SOURCE} ${SYSTEM_UI_SOURCE}
-                  ${WEB_SOURCE} ${SCRIPT_SOURCE}
+                  ${WEB_SOURCE} ${SCRIPT_SOURCE} ${METRICS_SOURCE}
                   ${PLATFORM_SOURCE})
 
 if (NOT EMSCRIPTEN)
@@ -100,6 +87,16 @@ GroupSources("Resource")
 GroupSources("Scene")
 GroupSources("UI")
 GroupSources("Web")
+GroupSources("Script")
+GroupSources("Metrics")
+GroupSources("BuildInfo")
+
+# Handle Git Revision
+include(GetGitRevisionDescription)
+get_git_head_revision(GIT_REFSPEC GIT_SHA1)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/BuildInfo/AtomicGitSHA.cpp.in" "${CMAKE_CURRENT_SOURCE_DIR}/BuildInfo/AtomicGitSHA.cpp" @ONLY)
+
+set (SOURCE_FILES ${SOURCE_FILES} BuildInfo/AtomicBuildInfo.cpp BuildInfo/AtomicBuildInfo.h BuildInfo/AtomicGitSHA.cpp BuildInfo/AtomicGitSHA.h)
 
 add_library(Atomic ${SOURCE_FILES})
 

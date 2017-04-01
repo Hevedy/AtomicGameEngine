@@ -65,7 +65,7 @@ namespace Atomic
 
         if (!*finit)
         {
-            LOGERRORF("Native Plugin: Unable to get atomic_plugin_init entry point in %s", pluginLibrary.CString());
+            ATOMIC_LOGERRORF("Native Plugin: Unable to get atomic_plugin_init entry point in %s", pluginLibrary.CString());
             return false;
         }
 
@@ -81,18 +81,18 @@ namespace Atomic
 
          duk_context* ctx = vm->GetJSContext();
 
-         LOGINFOF("Loading Native Plugin: %s", pluginLibrary.CString());
+         ATOMIC_LOGINFOF("Loading Native Plugin: %s", pluginLibrary.CString());
 
          if (!jsplugin_get_entry_points(pluginLibrary, &validatefunc, &initfunc, errorMsg))
          {
-             LOGERRORF("%s", errorMsg.CString());
+             ATOMIC_LOGERRORF("%s", errorMsg.CString());
              return false;
          }
 
          int version = ATOMIC_JSPLUGIN_VERSION;
          if (!validatefunc(version, &gJSVMExports, sizeof(JSVMImports)))
          {
-             LOGERRORF("Native Plugin: atomic_plugin_validate failed: %s", pluginLibrary.CString());
+             ATOMIC_LOGERRORF("Native Plugin: atomic_plugin_validate failed: %s", pluginLibrary.CString());
              return false;
          }
 
@@ -109,7 +109,7 @@ namespace Atomic
         if (duk_pcall(ctx, 1) != DUK_EXEC_SUCCESS)
         {
             success = false;
-            LOGERRORF("Native Plugin: error calling atomic_plugin_init %s with error %s",
+            ATOMIC_LOGERRORF("Native Plugin: error calling atomic_plugin_init %s with error %s",
                 pluginLibrary.CString(),
                 duk_safe_to_string(ctx, -1));
         }
@@ -118,7 +118,7 @@ namespace Atomic
             if (!duk_is_boolean(ctx, -1) || !duk_to_boolean(ctx, -1))
             {
                 success = false;
-                LOGERRORF("Native Plugin: error calling atomic_plugin_init, didn't return true %s", pluginLibrary.CString());
+                ATOMIC_LOGERRORF("Native Plugin: error calling atomic_plugin_init, didn't return true %s", pluginLibrary.CString());
             }
         }
 
@@ -150,8 +150,8 @@ namespace Atomic
         gJSVMExports.duk_get_memory_functions = duk_get_memory_functions;
         gJSVMExports.duk_gc = duk_gc;
 
-        gJSVMExports.duk_throw = duk_throw;
-        gJSVMExports.duk_fatal = duk_fatal;
+        gJSVMExports.duk_throw_raw = duk_throw_raw;
+        gJSVMExports.duk_fatal_raw = duk_fatal_raw;
         gJSVMExports.duk_error_raw = duk_error_raw;
         gJSVMExports.duk_error_va_raw = duk_error_va_raw;
 
@@ -194,7 +194,7 @@ namespace Atomic
         gJSVMExports.duk_push_pointer = duk_push_pointer;
         gJSVMExports.duk_push_sprintf = duk_push_sprintf;
         gJSVMExports.duk_push_vsprintf = duk_push_vsprintf;
-        gJSVMExports.duk_push_string_file_raw = duk_push_string_file_raw;
+        //gJSVMExports.duk_push_string_file_raw = duk_push_string_file_raw;
 
         gJSVMExports.duk_push_this = duk_push_this;
         gJSVMExports.duk_push_current_function = duk_push_current_function;
@@ -227,7 +227,7 @@ namespace Atomic
 
         gJSVMExports.duk_is_undefined = duk_is_undefined;
         gJSVMExports.duk_is_null = duk_is_null;
-        gJSVMExports.duk_is_null_or_undefined = duk_is_null_or_undefined;
+        //gJSVMExports.duk_is_null_or_undefined = duk_is_null_or_undefined;   This is a macro in Duktape 2.0.
         gJSVMExports.duk_is_boolean = duk_is_boolean;
         gJSVMExports.duk_is_number = duk_is_number;
         gJSVMExports.duk_is_nan = duk_is_nan;
@@ -291,7 +291,7 @@ namespace Atomic
         gJSVMExports.duk_to_buffer_raw = duk_to_buffer_raw;
         gJSVMExports.duk_to_pointer = duk_to_pointer;
         gJSVMExports.duk_to_object = duk_to_object;
-        gJSVMExports.duk_to_defaultvalue = duk_to_defaultvalue;
+        gJSVMExports.duk_to_defaultvalue = duk_to_primitive;  // In Duktape 2.0 duk_to_defaultvalue() has to be replaced by duk_to_primitive().
         gJSVMExports.duk_to_primitive = duk_to_primitive;
 
         gJSVMExports.duk_safe_to_lstring = duk_safe_to_lstring;

@@ -22,7 +22,6 @@
 
 import HierarchyFrameMenu = require("./menus/HierarchyFrameMenu");
 import MenuItemSources = require("./menus/MenuItemSources");
-import EditorEvents = require("editor/EditorEvents");
 import EditorUI = require("ui/EditorUI");
 import SearchBarFiltering = require("resources/SearchBarFiltering");
 
@@ -39,6 +38,7 @@ class HierarchyFrame extends Atomic.UIWidget {
     search: boolean = false;
     searchEdit: Atomic.UIEditField;
     selectedNode: Atomic.Node;
+    canReparent: boolean;
 
     constructor(parent: Atomic.UIWidget) {
 
@@ -48,9 +48,11 @@ class HierarchyFrame extends Atomic.UIWidget {
 
         this.load("AtomicEditor/editor/ui/hierarchyframe.tb.txt");
 
-        this.gravity = Atomic.UI_GRAVITY_TOP_BOTTOM;
+        this.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_ALL;
 
         this.searchEdit = <Atomic.UIEditField>this.getWidget("filter");
+
+        this.canReparent = true;
 
         var hierarchycontainer = parent.getWidget("hierarchycontainer");
         hierarchycontainer.addChild(this);
@@ -61,25 +63,40 @@ class HierarchyFrame extends Atomic.UIWidget {
         hierList.multiSelect = true;
         hierList.rootList.id = "hierList_";
 
-        hierList.subscribeToEvent("UIListViewSelectionChanged", (event: Atomic.UIListViewSelectionChangedEvent) => this.handleHierListSelectionChangedEvent(event));
+        hierList.subscribeToEvent(Atomic.UIListViewSelectionChangedEvent((event: Atomic.UIListViewSelectionChangedEvent) => this.handleHierListSelectionChangedEvent(event)));
 
         hierarchycontainer.addChild(hierList);
 
-        this.subscribeToEvent(this, "WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(this, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
-        this.subscribeToEvent(EditorEvents.ActiveSceneEditorChange, (data) => this.handleActiveSceneEditorChanged(data));
+        this.subscribeToEvent(Editor.EditorResourceCloseEvent((data) => this.handleEditorResourceClosed(data)));
+        this.subscribeToEvent(Editor.EditorActiveSceneEditorChangeEvent((data) => this.handleActiveSceneEditorChanged(data)));
 
-        // handle dropping on hierarchy, moving node, dropping prefabs, etc
-        this.subscribeToEvent(this.hierList.rootList, "DragEnded", (data) => this.handleDragEnded(data));
+        this.searchEdit.subscribeToEvent(this.searchEdit, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
+
         // on mouse up clear the list's drag object
-        this.subscribeToEvent("MouseButtonUp", () => {
+        this.subscribeToEvent(Atomic.MouseButtonUpEvent(() => {
+            // handle dropping on hierarchy, moving node, dropping prefabs, etc
+            this.subscribeToEvent(this.hierList.rootList, Atomic.DragEndedEvent((data) => this.handleDragEnded(data)));
+            this.hierList.rootList.dragObject = null;
+        }));
 
-          this.hierList.rootList.dragObject = null;
+        this.subscribeToEvent(Atomic.KeyDownEvent(() => {
+            this.canReparent = false;
+        }));
 
-        });
+        this.subscribeToEvent(Atomic.KeyUpEvent(() => {
+            this.canReparent = true;
+        }));
 
+        this.subscribeToEvent(Editor.EditorProjectClosedEvent((ev) => {
 
-        this.subscribeToEvent(EditorEvents.SceneClosed, (ev: EditorEvents.SceneClosedEvent) => {
+            this.scene = null;
+            this.populate();
+
+        }));
+
+        this.subscribeToEvent(Editor.EditorSceneClosedEvent((ev: Editor.EditorSceneClosedEvent) => {
 
             if (ev.scene == this.scene) {
 
@@ -89,9 +106,9 @@ class HierarchyFrame extends Atomic.UIWidget {
 
             }
 
-        });
+        }));
 
-        this.subscribeToEvent("ComponentAdded", (ev: Atomic.ComponentAddedEvent) => {
+        this.subscribeToEvent(Atomic.ComponentAddedEvent((ev: Atomic.ComponentAddedEvent) => {
 
             if (!ev.component || ev.component.typeName != "PrefabComponent") return;
 
@@ -105,9 +122,9 @@ class HierarchyFrame extends Atomic.UIWidget {
 
             }
 
-        });
+        }));
 
-        this.subscribeToEvent("ComponentRemoved", (ev: Atomic.ComponentRemovedEvent) => {
+        this.subscribeToEvent(Atomic.ComponentRemovedEvent((ev: Atomic.ComponentRemovedEvent) => {
 
             if (!ev.component || ev.component.typeName != "PrefabComponent") return;
 
@@ -120,9 +137,9 @@ class HierarchyFrame extends Atomic.UIWidget {
                 this.hierList.setItemTextSkin(node.id.toString(), "Folder");
             }
 
-        });
+        }));
 
-        this.subscribeToEvent("TemporaryChanged", (ev: Atomic.TemporaryChangedEvent) => {
+        this.subscribeToEvent(Atomic.TemporaryChangedEvent((ev: Atomic.TemporaryChangedEvent) => {
 
             // this can happen on a temporary status change on a non-scripted class instance
             if (!ev.serializable) {
@@ -143,22 +160,7 @@ class HierarchyFrame extends Atomic.UIWidget {
 
             }
 
-        });
-
-        // Activates search while user is typing in search widget
-        this.searchEdit.subscribeToEvent(this.searchEdit, "WidgetEvent", (data) => {
-            if (!ToolCore.toolSystem.project) return;
-
-            if (data.type == Atomic.UI_EVENT_TYPE_KEY_UP) {
-                this.search = true;
-                this.populate();
-
-                if (this.searchEdit.text == "" && this.selectedNode) {
-                        this.hierList.selectItemByID(this.selectedNode.id.toString(), true);    //maintains selected item after search is cancelled
-                }
-
-            }
-        });
+        }));
 
     }
 
@@ -191,34 +193,32 @@ class HierarchyFrame extends Atomic.UIWidget {
 
     }
 
-    handleActiveSceneEditorChanged(event: EditorEvents.ActiveSceneEditorChangeEvent) {
+    setSceneEditor(sceneEditor:Editor.SceneEditor3D) {
+
+        if (this.sceneEditor == sceneEditor) {
+            return;
+        }
 
         if (this.scene)
             this.unsubscribeFromEvents(this.scene);
 
-        this.sceneEditor = null;
-        this.scene = null;
-
-        if (!event.sceneEditor)
-            return;
-
-        this.sceneEditor = event.sceneEditor;
-        this.scene = event.sceneEditor.scene;
+        this.sceneEditor = sceneEditor;
+        this.scene = sceneEditor == null ? null : sceneEditor.scene;
 
         this.populate();
 
         if (this.scene) {
 
-            this.subscribeToEvent(this.scene, "SceneNodeSelected", (event: Editor.SceneNodeSelectedEvent) => this.handleSceneNodeSelected(event));
-            this.subscribeToEvent(this.scene, "SceneEditNodeAdded", (ev: Editor.SceneEditNodeAddedEvent) => this.handleSceneEditNodeAdded(ev));
-            this.subscribeToEvent(this.scene, "SceneEditNodeRemoved", (ev: Editor.SceneEditNodeRemovedEvent) => this.handleSceneEditNodeRemoved(ev));
-            this.subscribeToEvent(this.scene, "NodeNameChanged", (ev: Atomic.NodeNameChangedEvent) => {
+            this.subscribeToEvent(this.scene, Editor.SceneNodeSelectedEvent((event: Editor.SceneNodeSelectedEvent) => this.handleSceneNodeSelected(event)));
+            this.subscribeToEvent(this.scene, Editor.SceneEditNodeAddedEvent((ev: Editor.SceneEditNodeAddedEvent) => this.handleSceneEditNodeAdded(ev)));
+            this.subscribeToEvent(this.scene, Editor.SceneEditNodeRemovedEvent((ev: Editor.SceneEditNodeRemovedEvent) => this.handleSceneEditNodeRemoved(ev)));
+            this.subscribeToEvent(this.scene, Atomic.NodeNameChangedEvent((ev: Atomic.NodeNameChangedEvent) => {
 
                 this.hierList.setItemText(ev.node.id.toString(), ev.node.name);
 
-            });
+            }));
 
-            this.subscribeToEvent(this.scene, "SceneEditNodeReparent", (ev) => {
+            this.subscribeToEvent(this.scene, Editor.SceneEditNodeReparentEvent((ev) => {
 
                 if (!ev.added) {
                     delete this.nodeIDToItemID[ev.node.id];
@@ -230,10 +230,24 @@ class HierarchyFrame extends Atomic.UIWidget {
 
                 }
 
-            });
+            }));
 
 
         }
+
+    }
+
+    handleEditorResourceClosed(event) {
+
+        if (this.sceneEditor == event.editor) {
+            this.setSceneEditor(null);
+        }
+
+    }
+
+    handleActiveSceneEditorChanged(event: Editor.EditorActiveSceneEditorChangeEvent) {
+
+        this.setSceneEditor(event.sceneEditor);
 
     }
 
@@ -334,19 +348,40 @@ class HierarchyFrame extends Atomic.UIWidget {
         if (!ev.dragObject.object)
             return;
 
-        var typeName = ev.dragObject.object.typeName;
-
         var dropNode: Atomic.Node = this.scene.getNode(Number(this.hierList.hoverItemID));
 
         if (!dropNode) return;
 
-        if (typeName == "Node") {
+        var dragNodeTypeName = ev.dragObject.object.typeName;
 
-            var dragNode = <Atomic.Node>ev.dragObject.object;
+        if (!this.canReparent)
+            return;
 
-            this.sceneEditor.reparentNode(dragNode, dropNode);
+        if (dragNodeTypeName == "Node") {
 
-        } else if (typeName == "Asset") {
+            if (this.sceneEditor.selection.getSelectedNodeCount() < 2) {
+
+                var dragNode = <Atomic.Node>ev.dragObject.object;
+                this.sceneEditor.reparentNode(dragNode, dropNode);
+
+            } else {
+
+                var tempSelectedList = [];
+
+                for (var i = 0; i < this.sceneEditor.selection.getSelectedNodeCount(); i++)
+                    tempSelectedList.push(this.sceneEditor.selection.getSelectedNode(i));
+
+                for (var j in tempSelectedList) {
+
+                    var tempNode = tempSelectedList[j];
+                    var typeName = tempNode.typeName;
+
+                    if (typeName == "Node")
+                        this.sceneEditor.reparentNode(tempNode, dropNode);
+                }
+            }
+
+        } else if (dragNodeTypeName == "Asset") {
 
             var asset = <ToolCore.Asset>ev.dragObject.object;
             var newNode = asset.instantiateNode(dropNode, asset.name);
@@ -385,14 +420,27 @@ class HierarchyFrame extends Atomic.UIWidget {
 
     handleWidgetEvent(data: Atomic.UIWidgetEvent): boolean {
 
-        if (data.type == Atomic.UI_EVENT_TYPE_KEY_UP) {
+        if (!this.scene) return;
+
+        if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_KEY_UP) {
+
+            // activates search while user is typing in search widget
+            if (data.target == this.searchEdit) {
+
+                this.search = true;
+                this.populate();
+
+                if (this.searchEdit.text == "" && this.selectedNode) {
+                        this.hierList.selectItemByID(this.selectedNode.id.toString(), true);    //maintains selected item after search is cancelled
+                }
+            }
 
             // node deletion
             if (data.key == Atomic.KEY_DELETE || data.key == Atomic.KEY_BACKSPACE) {
                 this.sceneEditor.selection.delete();
             }
 
-        } else if (data.type == Atomic.UI_EVENT_TYPE_POINTER_DOWN) {
+        } else if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_POINTER_DOWN) {
 
             if (data.target == this.hierList.rootList) {
 
@@ -408,9 +456,9 @@ class HierarchyFrame extends Atomic.UIWidget {
 
             }
 
-        } else if (data.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        } else if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
-            if (this.menu.handleNodeContextMenu(data.target, data.refid)) {
+            if (this.menu.handleNodeContextMenu(data.target, data.refid, this.sceneEditor)) {
                 return true;
             }
 
@@ -456,7 +504,7 @@ class HierarchyFrame extends Atomic.UIWidget {
             }
 
 
-        } else if (data.type == Atomic.UI_EVENT_TYPE_RIGHT_POINTER_UP) {
+        } else if (data.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_RIGHT_POINTER_UP) {
 
             var id = data.target.id;
             var node: Atomic.Node;

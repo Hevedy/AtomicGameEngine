@@ -36,7 +36,7 @@ namespace ToolCore
 
 class OpenAssetImporter : public Object
 {
-    OBJECT(OpenAssetImporter);
+    ATOMIC_OBJECT(OpenAssetImporter, Object);
 
 public:
 
@@ -60,8 +60,13 @@ public:
     void SetEndTime(float endTime) { endTime_ = endTime; }
     void SetScale(float scale) { scale_ = scale; }
     void SetExportAnimations(bool exportAnimations) { noAnimations_ = !exportAnimations; }
-
+    void SetImportMaterials(bool importMaterials) { importMaterials_ = importMaterials; }
+    void SetIncludeNonSkinningBones(bool includeNonSkinningBones) { includeNonSkinningBones_ = includeNonSkinningBones; }
     void SetVerboseLog(bool verboseLog) { verboseLog_ = verboseLog; }
+
+    bool GetImportMaterialsDefault() { return importMaterialsDefault_; }
+
+    bool GetIncludeNonSkinningBones() { return includeNonSkinningBonesDefault_; }
 
     const Vector<AnimationInfo>& GetAnimationInfos() { return animationInfos_; }
 
@@ -106,6 +111,8 @@ private:
     String resourcePath_;
     String outPath_;
     bool useSubdirs_;
+    bool importMaterials_;
+    bool importMaterialsDefault_;
     bool localIDs_;
     bool saveBinary_;
     bool createZone_;
@@ -117,12 +124,14 @@ private:
     bool noEmptyNodes_;
     bool saveMaterialList_;
     bool includeNonSkinningBones_;
+    bool includeNonSkinningBonesDefault_;
     bool verboseLog_;
     bool emissiveAO_;
     bool noOverwriteMaterial_;
     bool noOverwriteTexture_;
     bool noOverwriteNewerTexture_;
     bool checkUniqueModel_;
+    bool useVertexColors_;
     float scale_;
     unsigned maxBones_;
 

@@ -39,6 +39,7 @@
 #include <TurboBadger/tb_menu_window.h>
 #include <TurboBadger/tb_popup_window.h>
 #include <TurboBadger/image/tb_image_widget.h>
+#include <TurboBadger/tb_atomic_widgets.h>
 
 void register_tbbf_font_renderer();
 void register_stb_font_renderer();
@@ -83,6 +84,10 @@ using namespace tb;
 #include "UISelectDropdown.h"
 #include "UIMenuWindow.h"
 #include "UIPopupWindow.h"
+#include "UISlider.h"
+#include "UIColorWidget.h"
+#include "UIColorWheel.h"
+#include "UIBargraph.h"
 
 #include "SystemUI/SystemUI.h"
 #include "SystemUI/SystemUIEvents.h"
@@ -116,10 +121,11 @@ UI::UI(Context* context) :
     skinLoaded_(false),
     consoleVisible_(false),
     exitRequested_(false),
-    changedEventsBlocked_(0)
+    changedEventsBlocked_(0),
+    tooltipHoverTime_ (0.0f)
 {
 
-    SubscribeToEvent(E_EXITREQUESTED, HANDLER(UI, HandleExitRequested));
+    SubscribeToEvent(E_EXITREQUESTED, ATOMIC_HANDLER(UI, HandleExitRequested));
 
 }
 
@@ -137,10 +143,12 @@ UI::~UI()
         
         tb::TBWidgetsAnimationManager::Shutdown();
 
-        widgetWrap_.Clear();
         delete rootWidget_;
+        widgetWrap_.Clear();
+        
         // leak
         //delete TBUIRenderer::renderer_;
+
         tb_core_shutdown();
     }
 
@@ -176,7 +184,7 @@ void UI::SetBlockChangedEvents(bool blocked)
 
         if (changedEventsBlocked_ < 0)
         {
-            LOGERROR("UI::BlockChangedEvents - mismatched block calls, setting to 0");
+            ATOMIC_LOGERROR("UI::BlockChangedEvents - mismatched block calls, setting to 0");
             changedEventsBlocked_ = 0;
         }
     }
@@ -213,22 +221,22 @@ void UI::Initialize(const String& languageFile)
     rootWidget_->SetSize(width, height);
     rootWidget_->SetVisibilility(tb::WIDGET_VISIBILITY_VISIBLE);
 
-    SubscribeToEvent(E_MOUSEBUTTONDOWN, HANDLER(UI, HandleMouseButtonDown));
-    SubscribeToEvent(E_MOUSEBUTTONUP, HANDLER(UI, HandleMouseButtonUp));
-    SubscribeToEvent(E_MOUSEMOVE, HANDLER(UI, HandleMouseMove));
-    SubscribeToEvent(E_MOUSEWHEEL, HANDLER(UI, HandleMouseWheel));
-    SubscribeToEvent(E_KEYDOWN, HANDLER(UI, HandleKeyDown));
-    SubscribeToEvent(E_KEYUP, HANDLER(UI, HandleKeyUp));
-    SubscribeToEvent(E_TEXTINPUT, HANDLER(UI, HandleTextInput));
-    SubscribeToEvent(E_UPDATE, HANDLER(UI, HandleUpdate));
-    SubscribeToEvent(E_SCREENMODE, HANDLER(UI, HandleScreenMode));
-    SubscribeToEvent(SystemUI::E_CONSOLECLOSED, HANDLER(UI, HandleConsoleClosed));
+    SubscribeToEvent(E_MOUSEBUTTONDOWN, ATOMIC_HANDLER(UI, HandleMouseButtonDown));
+    SubscribeToEvent(E_MOUSEBUTTONUP, ATOMIC_HANDLER(UI, HandleMouseButtonUp));
+    SubscribeToEvent(E_MOUSEMOVE, ATOMIC_HANDLER(UI, HandleMouseMove));
+    SubscribeToEvent(E_MOUSEWHEEL, ATOMIC_HANDLER(UI, HandleMouseWheel));
+    SubscribeToEvent(E_KEYDOWN, ATOMIC_HANDLER(UI, HandleKeyDown));
+    SubscribeToEvent(E_KEYUP, ATOMIC_HANDLER(UI, HandleKeyUp));
+    SubscribeToEvent(E_TEXTINPUT, ATOMIC_HANDLER(UI, HandleTextInput));
+    SubscribeToEvent(E_UPDATE, ATOMIC_HANDLER(UI, HandleUpdate));
+    SubscribeToEvent(E_SCREENMODE, ATOMIC_HANDLER(UI, HandleScreenMode));
+    SubscribeToEvent(SystemUI::E_CONSOLECLOSED, ATOMIC_HANDLER(UI, HandleConsoleClosed));
 
-    SubscribeToEvent(E_TOUCHBEGIN, HANDLER(UI, HandleTouchBegin));
-    SubscribeToEvent(E_TOUCHEND, HANDLER(UI, HandleTouchEnd));
-    SubscribeToEvent(E_TOUCHMOVE, HANDLER(UI, HandleTouchMove));
+    SubscribeToEvent(E_TOUCHBEGIN, ATOMIC_HANDLER(UI, HandleTouchBegin));
+    SubscribeToEvent(E_TOUCHEND, ATOMIC_HANDLER(UI, HandleTouchEnd));
+    SubscribeToEvent(E_TOUCHMOVE, ATOMIC_HANDLER(UI, HandleTouchMove));
 
-    SubscribeToEvent(E_RENDERUPDATE, HANDLER(UI, HandleRenderUpdate));
+    SubscribeToEvent(E_RENDERUPDATE, ATOMIC_HANDLER(UI, HandleRenderUpdate));
 
     // register the UIDragDrop subsystem (after we have subscribed to events, so it is processed after)
     context_->RegisterSubsystem(new UIDragDrop(context_));
@@ -408,7 +416,9 @@ void UI::Render(bool resetRenderTargets)
     SetVertexData(vertexBuffer_, vertexData_);
     Render(vertexBuffer_, batches_, 0, batches_.Size());
 
-    GetSubsystem<SystemUI::SystemUI>()->Render();
+    SystemUI::SystemUI* systemUI = GetSubsystem<SystemUI::SystemUI>();
+    if (systemUI)
+        systemUI->Render();
 }
 
 void UI::HandleRenderUpdate(StringHash eventType, VariantMap& eventData)
@@ -471,7 +481,7 @@ void UI::TBFileReader(const char* filename, void** data, unsigned* length)
     SharedPtr<File> file = cache->GetFile(filename);
     if (!file || !file->IsOpen())
     {
-        LOGERRORF("UI::TBFileReader: Unable to load file: %s", filename);
+        ATOMIC_LOGERRORF("UI::TBFileReader: Unable to load file: %s", filename);
         return;
     }
 
@@ -589,6 +599,7 @@ bool UI::UnwrapWidget(tb::TBWidget* widget)
 {
     if (widgetWrap_.Contains(widget))
     {
+        widget->SetDelegate(0);
         widgetWrap_.Erase(widget);
         return true;
     }
@@ -603,29 +614,29 @@ void UI::PruneUnreachableWidgets()
 
     for (itr = widgetWrap_.Begin(); itr != widgetWrap_.End(); )
     {
-        if ((*itr).first_->GetParent() || (*itr).second_->JSGetHeapPtr())
+        if ((*itr).first_->GetParent() || (*itr).second_->Refs() > 1)
         {
             itr++;
             continue;
         }
 
-        tb::TBWidget* toDelete = (*itr).first_;
-
         itr.GotoNext();
 
+        VariantMap eventData;
+        eventData[WidgetDeleted::P_WIDGET] = (UIWidget*) (*itr).second_;
+        (*itr).second_->SendEvent(E_WIDGETDELETED, eventData);
+
+        tb::TBWidget* toDelete = (*itr).first_;
+        UnwrapWidget(toDelete);
         delete toDelete;
 
-        // this will likely be flagged by valgrind as accessing invalid memory
-        assert(!widgetWrap_.Contains(toDelete));
     }
 }
 
 void UI::WrapWidget(UIWidget* widget, tb::TBWidget* tbwidget)
 {
     assert (!widgetWrap_.Contains(tbwidget));
-
     widgetWrap_[tbwidget] = widget;
-
 }
 
 UIWidget* UI::WrapWidget(tb::TBWidget* widget)
@@ -644,7 +655,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIPopupWindow* popupWindow = new UIPopupWindow(context_, false);
         popupWindow->SetWidget(widget);
-        widgetWrap_[widget] = popupWindow;
+        WrapWidget(popupWindow, widget);
         return popupWindow;
     }
 
@@ -652,7 +663,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIDimmer* dimmer = new UIDimmer(context_, false);
         dimmer->SetWidget(widget);
-        widgetWrap_[widget] = dimmer;
+        WrapWidget(dimmer, widget);
         return dimmer;
     }
 
@@ -660,7 +671,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIScrollContainer* container = new UIScrollContainer(context_, false);
         container->SetWidget(widget);
-        widgetWrap_[widget] = container;
+        WrapWidget(container, widget);
         return container;
     }
 
@@ -668,15 +679,39 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIInlineSelect* select = new UIInlineSelect(context_, false);
         select->SetWidget(widget);
-        widgetWrap_[widget] = select;
+        WrapWidget(select, widget);
         return select;
+    }
+
+    if (widget->IsOfType<TBSlider>())
+    {
+        UISlider* slider = new UISlider(context_, false);
+        slider->SetWidget(widget);
+        WrapWidget(slider, widget);
+        return slider;
+    }
+
+    if (widget->IsOfType<TBColorWidget>())
+    {
+        UIColorWidget* colorWidget = new UIColorWidget(context_, false);
+        colorWidget->SetWidget(widget);
+        WrapWidget(colorWidget, widget);
+        return colorWidget;
+    }
+
+    if (widget->IsOfType<TBColorWheel>())
+    {
+        UIColorWheel* colorWheel = new UIColorWheel(context_, false);
+        colorWheel->SetWidget(widget);
+        WrapWidget(colorWheel, widget);
+        return colorWheel;
     }
 
     if (widget->IsOfType<TBSection>())
     {
         UISection* section = new UISection(context_, false);
         section->SetWidget(widget);
-        widgetWrap_[widget] = section;
+        WrapWidget(section, widget);
         return section;
     }
 
@@ -684,7 +719,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UISeparator* sep = new UISeparator(context_, false);
         sep->SetWidget(widget);
-        widgetWrap_[widget] = sep;
+        WrapWidget(sep, widget);
         return sep;
     }
 
@@ -692,7 +727,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIContainer* container = new UIContainer(context_, false);
         container->SetWidget(widget);
-        widgetWrap_[widget] = container;
+        WrapWidget(container, widget);
         return container;
     }
 
@@ -700,7 +735,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UISelectDropdown* select = new UISelectDropdown(context_, false);
         select->SetWidget(widget);
-        widgetWrap_[widget] = select;
+        WrapWidget(select, widget);
         return select;
     }
 
@@ -712,7 +747,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
 
         UIButton* button = new UIButton(context_, false);
         button->SetWidget(widget);
-        widgetWrap_[widget] = button;
+        WrapWidget(button, widget);
         return button;
     }
 
@@ -720,7 +755,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UITextField* textfield = new UITextField(context_, false);
         textfield->SetWidget(widget);
-        widgetWrap_[widget] = textfield;
+        WrapWidget(textfield, widget);
         return textfield;
     }
 
@@ -728,7 +763,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIEditField* editfield = new UIEditField(context_, false);
         editfield->SetWidget(widget);
-        widgetWrap_[widget] = editfield;
+        WrapWidget(editfield, widget);
         return editfield;
     }
 
@@ -736,7 +771,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UISkinImage* skinimage = new UISkinImage(context_, "", false);
         skinimage->SetWidget(widget);
-        widgetWrap_[widget] = skinimage;
+        WrapWidget(skinimage, widget);
         return skinimage;
     }
 
@@ -744,14 +779,14 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIImageWidget* imagewidget = new UIImageWidget(context_, false);
         imagewidget->SetWidget(widget);
-        widgetWrap_[widget] = imagewidget;
+        WrapWidget(imagewidget, widget);
         return imagewidget;
     }
     if (widget->IsOfType<TBClickLabel>())
     {
         UIClickLabel* nwidget = new UIClickLabel(context_, false);
         nwidget->SetWidget(widget);
-        widgetWrap_[widget] = nwidget;
+        WrapWidget(nwidget, widget);
         return nwidget;
     }
 
@@ -759,7 +794,15 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UICheckBox* nwidget = new UICheckBox(context_, false);
         nwidget->SetWidget(widget);
-        widgetWrap_[widget] = nwidget;
+        WrapWidget(nwidget, widget);
+        return nwidget;
+    }
+
+    if (widget->IsOfType<TBBarGraph>())
+    {
+        UIBargraph* nwidget = new UIBargraph(context_, false);
+        nwidget->SetWidget(widget);
+        WrapWidget(nwidget, widget);
         return nwidget;
     }
 
@@ -767,7 +810,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UISelectList* nwidget = new UISelectList(context_, false);
         nwidget->SetWidget(widget);
-        widgetWrap_[widget] = nwidget;
+        WrapWidget(nwidget, widget);
         return nwidget;
     }
 
@@ -775,7 +818,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIMessageWindow* nwidget = new UIMessageWindow(context_, NULL, "", false);
         nwidget->SetWidget(widget);
-        widgetWrap_[widget] = nwidget;
+        WrapWidget(nwidget, widget);
         return nwidget;
     }
 
@@ -783,7 +826,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UITabContainer* nwidget = new UITabContainer(context_, false);
         nwidget->SetWidget(widget);
-        widgetWrap_[widget] = nwidget;
+        WrapWidget(nwidget, widget);
         return nwidget;
     }
 
@@ -791,7 +834,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UISceneView* nwidget = new UISceneView(context_, false);
         nwidget->SetWidget(widget);
-        widgetWrap_[widget] = nwidget;
+        WrapWidget(nwidget, widget);
         return nwidget;
     }
 
@@ -800,7 +843,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UILayout* layout = new UILayout(context_, (UI_AXIS) widget->GetAxis(), false);
         layout->SetWidget(widget);
-        widgetWrap_[widget] = layout;
+        WrapWidget(layout, widget);
         return layout;
     }
 
@@ -808,7 +851,7 @@ UIWidget* UI::WrapWidget(tb::TBWidget* widget)
     {
         UIWidget* nwidget = new UIWidget(context_, false);
         nwidget->SetWidget(widget);
-        widgetWrap_[widget] = nwidget;
+        WrapWidget(nwidget, widget);
         return nwidget;
     }
 
@@ -824,6 +867,17 @@ void UI::OnWidgetDelete(tb::TBWidget *widget)
 bool UI::OnWidgetDying(tb::TBWidget *widget)
 {
     return false;
+}
+
+void UI::OnWindowClose(tb::TBWindow *window)
+{
+    if (widgetWrap_.Contains(window))
+    {
+        UIWidget* widget = widgetWrap_[window];
+        VariantMap eventData;
+        eventData[WindowClosed::P_WINDOW] = widget;
+        widget->SendEvent(E_WINDOWCLOSED, eventData);
+    }
 }
 
 void UI::OnWidgetFocusChanged(TBWidget *widget, bool focused)
@@ -859,6 +913,47 @@ void UI::ToggleDebugHud()
         return;
 
     hud->ToggleAll();
+}
+
+void UI::SetDebugHudExtents(bool useRootExtent, const IntVector2& position, const IntVector2& size)
+{
+    SystemUI::DebugHud* hud = GetSubsystem<SystemUI::DebugHud>();
+
+    if (!hud)
+        return;
+
+    hud->SetExtents(useRootExtent, position, size);
+
+}
+
+void UI::CycleDebugHudMode()
+{
+    SystemUI::DebugHud* hud = GetSubsystem<SystemUI::DebugHud>();
+
+    if (!hud)
+        return;
+
+    hud->CycleMode();
+}
+
+void UI::SetDebugHudProfileMode(DebugHudProfileMode mode)
+{
+    SystemUI::DebugHud* hud = GetSubsystem<SystemUI::DebugHud>();
+
+    if (!hud)
+        return;
+
+    hud->SetProfilerMode(mode);
+}
+
+void UI::SetDebugHudRefreshInterval(float seconds)
+{
+    SystemUI::DebugHud* hud = GetSubsystem<SystemUI::DebugHud>();
+
+    if (!hud)
+        return;
+
+    hud->SetProfilerInterval(seconds);
 }
 
 void UI::ShowConsole(bool value)

@@ -21,6 +21,8 @@
 //
 
 import ScriptWidget = require("ui/ScriptWidget");
+import EditorUI = require("ui/EditorUI");
+
 
 class InspectorWidget extends ScriptWidget {
 
@@ -38,15 +40,15 @@ class InspectorWidget extends ScriptWidget {
         var layout = this.rootLayout = new Atomic.UILayout();
         layout.spacing = 4;
 
-        layout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION_GRAVITY;
-        layout.layoutPosition = Atomic.UI_LAYOUT_POSITION_LEFT_TOP;
+        layout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+        layout.layoutPosition = Atomic.UI_LAYOUT_POSITION.UI_LAYOUT_POSITION_LEFT_TOP;
         layout.layoutParams = nlp;
-        layout.axis = Atomic.UI_AXIS_Y;
+        layout.axis = Atomic.UI_AXIS.UI_AXIS_Y;
 
-        this.gravity = Atomic.UI_GRAVITY_ALL;
+        this.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_ALL;
         this.addChild(layout);
 
-        this.subscribeToEvent("WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 
@@ -57,7 +59,7 @@ class InspectorWidget extends ScriptWidget {
     createAttrName(name:string):Atomic.UITextField {
 
       var nameField = new Atomic.UITextField();
-      nameField.textAlign = Atomic.UI_TEXT_ALIGN_LEFT;
+      nameField.textAlign = Atomic.UI_TEXT_ALIGN.UI_TEXT_ALIGN_LEFT;
       nameField.skinBg = "InspectorTextAttrName";
       nameField.text = name;
       nameField.fontDescription = this.attrFontDesc;
@@ -82,10 +84,10 @@ class InspectorWidget extends ScriptWidget {
 
     createVerticalAttrLayout():Atomic.UILayout {
 
-      var layout = new Atomic.UILayout(Atomic.UI_AXIS_Y);
+      var layout = new Atomic.UILayout(Atomic.UI_AXIS.UI_AXIS_Y);
       layout.spacing = 3;
-      layout.layoutPosition = Atomic.UI_LAYOUT_POSITION_LEFT_TOP;
-      layout.layoutSize = Atomic.UI_LAYOUT_SIZE_AVAILABLE;
+      layout.layoutPosition = Atomic.UI_LAYOUT_POSITION.UI_LAYOUT_POSITION_LEFT_TOP;
+      layout.layoutSize = Atomic.UI_LAYOUT_SIZE.UI_LAYOUT_SIZE_AVAILABLE;
 
       return layout;
 
@@ -95,7 +97,7 @@ class InspectorWidget extends ScriptWidget {
 
       var button = new Atomic.UIButton();
       button.fontDescription = this.attrFontDesc;
-      button.gravity = Atomic.UI_GRAVITY_RIGHT;
+      button.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_RIGHT;
       button.text = "Apply";
 
       button.onClick = function() {
@@ -111,13 +113,13 @@ class InspectorWidget extends ScriptWidget {
     createAttrCheckBox(name:string, parent:Atomic.UIWidget):Atomic.UICheckBox {
 
       var attrLayout = new Atomic.UILayout();
-      attrLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+      attrLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
 
       var _name = this.createAttrName(name);
       attrLayout.addChild(_name);
 
       var box = new Atomic.UICheckBox();
-      box.skinBg = "TBGreyCheckBox";
+      box.skinBg = "TBCheckBox";
       attrLayout.addChild(box);
       parent.addChild(attrLayout);
 
@@ -128,13 +130,13 @@ class InspectorWidget extends ScriptWidget {
     createAttrEditField(name:string, parent:Atomic.UIWidget):Atomic.UIEditField {
 
       var attrLayout = new Atomic.UILayout();
-      attrLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION_GRAVITY;
+      attrLayout.layoutDistribution = Atomic.UI_LAYOUT_DISTRIBUTION.UI_LAYOUT_DISTRIBUTION_GRAVITY;
 
       var _name = this.createAttrName(name);
       attrLayout.addChild(_name);
 
       var edit = new Atomic.UIEditField();
-      edit.textAlign = Atomic.UI_TEXT_ALIGN_LEFT;
+      edit.textAlign = Atomic.UI_TEXT_ALIGN.UI_TEXT_ALIGN_LEFT;
       edit.skinBg = "TBAttrEditorField";
       edit.fontDescription = this.attrFontDesc;
       var lp = new Atomic.UILayoutParams();
@@ -152,6 +154,29 @@ class InspectorWidget extends ScriptWidget {
 
       return false;
 
+    }
+
+    createPreviewAnimationButton(asset: ToolCore.Asset): Atomic.UIButton {
+
+        var button = new Atomic.UIButton();
+        button.fontDescription = this.attrFontDesc;
+        button.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_RIGHT;
+        button.text = "Preview Animation";
+
+        button.onClick = function () {
+            this.onPreviewAnimation(asset);
+            // button is deleted in callback, so make sure we return
+            // that we're handled
+            return true;
+        }.bind(this);
+
+        return button;
+    }
+
+    onPreviewAnimation(asset: ToolCore.Asset) {
+
+        var mainFrame = EditorUI.getMainFrame();
+        mainFrame.showAnimationToolbar(asset);
     }
 
     rootLayout:Atomic.UILayout;

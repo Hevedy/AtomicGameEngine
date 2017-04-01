@@ -39,7 +39,7 @@ class SceneEditor3D;
 
 class SceneSelection: public Object
 {
-    OBJECT(SceneSelection);
+    ATOMIC_OBJECT(SceneSelection, Object);
 
 public:
 
@@ -75,12 +75,27 @@ private:
     void HandleSceneEditPrefabSave(StringHash eventType, VariantMap& eventData);
     void HandleSceneEditPrefabRevert(StringHash eventType, VariantMap& eventData);
     void HandleSceneEditPrefabBreak(StringHash eventType, VariantMap& eventData);
+    void HandleSceneEditPrefabCopy(StringHash eventType, VariantMap& eventData);
+    void HandleSceneEditPrefabPaste(StringHash eventType, VariantMap& eventData);
+    void HandleSceneEditComponentCopy(StringHash eventType, VariantMap& eventData);
+    void HandleSceneEditComponentPaste(StringHash eventType, VariantMap& eventData);
 
     WeakPtr<SceneEditor3D> sceneEditor3D_;
     WeakPtr<Scene> scene_;
 
     Vector<SharedPtr<Node>> clipBoardNodes_;
     Vector<SharedPtr<Node>> nodes_;
+
+    Component* copiedComponent_;
+
+    Vector3 nodePosition_;
+    Quaternion nodeRotation_;
+    Vector3 nodeScale_;
+
+    Vector<String> componentAttributeNames_;
+    Vector<Variant> componentAttributeValues_;
+
+    bool hasCopied_;
 
 };
 

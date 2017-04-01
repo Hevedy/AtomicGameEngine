@@ -29,9 +29,12 @@
 #include "Font.h"
 #include "Text.h"
 #include "SystemUI.h"
+#include "UIElement.h"
 #include "DebugHud.h"
 
 #include "../../DebugNew.h"
+
+#include "../../Metrics/Metrics.h"
 
 namespace Atomic
 {
@@ -59,8 +62,9 @@ static const float FPS_UPDATE_INTERVAL = 0.5f;
 DebugHud::DebugHud(Context* context) :
     Object(context),
     profilerMaxDepth_(M_MAX_UNSIGNED),
+    profilerMode_(DEBUG_HUD_PROFILE_PERFORMANCE),
     profilerInterval_(1000),
-    useRendererStats_(false),
+    useRendererStats_(true),
     mode_(DEBUGHUD_SHOW_NONE),
     fpsTimeSinceUpdate_(FPS_UPDATE_INTERVAL),
     fpsFramesSinceUpdate_(0),
@@ -69,25 +73,34 @@ DebugHud::DebugHud(Context* context) :
     SystemUI* ui = GetSubsystem<SystemUI>();
     UIElement* uiRoot = ui->GetRoot();
 
+    layout_ = new UIElement(context_);
+    uiRoot->AddChild(layout_);
+
+    layout_->SetSize(uiRoot->GetSize());
+
     statsText_ = new Text(context_);
     statsText_->SetAlignment(HA_LEFT, VA_TOP);
     statsText_->SetPriority(100);
     statsText_->SetVisible(false);
-    uiRoot->AddChild(statsText_);
+    layout_->AddChild(statsText_);
 
     modeText_ = new Text(context_);
     modeText_->SetAlignment(HA_LEFT, VA_BOTTOM);
     modeText_->SetPriority(100);
     modeText_->SetVisible(false);
-    uiRoot->AddChild(modeText_);
+    layout_->AddChild(modeText_);
 
     profilerText_ = new Text(context_);
     profilerText_->SetAlignment(HA_RIGHT, VA_TOP);
     profilerText_->SetPriority(100);
     profilerText_->SetVisible(false);
-    uiRoot->AddChild(profilerText_);
+    layout_->AddChild(profilerText_);
 
-    SubscribeToEvent(E_POSTUPDATE, HANDLER(DebugHud, HandlePostUpdate));
+    SubscribeToEvent(E_POSTUPDATE, ATOMIC_HANDLER(DebugHud, HandlePostUpdate));
+
+    statsText_->SetTextEffect(TE_SHADOW);
+    modeText_->SetTextEffect(TE_SHADOW);
+    profilerText_->SetTextEffect(TE_SHADOW);
 }
 
 DebugHud::~DebugHud()
@@ -95,6 +108,23 @@ DebugHud::~DebugHud()
     statsText_->Remove();
     modeText_->Remove();
     profilerText_->Remove();
+}
+
+void DebugHud::SetExtents(bool useRootExtents, const IntVector2& position, const IntVector2& size)
+{
+    if (useRootExtents)
+    {
+        SystemUI* ui = GetSubsystem<SystemUI>();
+        UIElement* uiRoot = ui->GetRoot();
+
+        layout_->SetPosition(IntVector2::ZERO);
+        layout_->SetSize(uiRoot->GetSize());
+    }
+    else
+    {
+        layout_->SetPosition(position);
+        layout_->SetSize(size);
+    }
 }
 
 void DebugHud::Update(float timeStep)
@@ -105,13 +135,11 @@ void DebugHud::Update(float timeStep)
         return;
 
     // Ensure UI-elements are not detached
-    if (!statsText_->GetParent())
+    if (!layout_->GetParent())
     {
         SystemUI* ui = GetSubsystem<SystemUI>();
         UIElement* uiRoot = ui->GetRoot();
-        uiRoot->AddChild(statsText_);
-        uiRoot->AddChild(modeText_);
-        uiRoot->AddChild(profilerText_);
+        uiRoot->AddChild(layout_);
     }
 
     if (statsText_->IsVisible())
@@ -138,9 +166,20 @@ void DebugHud::Update(float timeStep)
         }
 
         String stats;
-        stats.AppendWithFormat("FPS %d\nTriangles %u\nBatches %u\nViews %u\nLights %u\nShadowmaps %u\nOccluders %u",
-            fps_,
-            primitives,
+
+        unsigned singlePassPrimitives = graphics->GetSinglePassPrimitives();
+        unsigned editorPrimitives = graphics->GetNumPrimitives() - renderer->GetNumPrimitives();
+
+        if (singlePassPrimitives)
+            stats.AppendWithFormat("FPS %d\nTriangles (All passes) %u\nTriangles (Single pass) %u\nTriangles (Editor) %u\n", 
+                fps_, 
+                primitives, 
+                singlePassPrimitives, 
+                editorPrimitives);
+        else
+            stats.AppendWithFormat("FPS %d\nTriangles %u\n", fps_, primitives);
+                    
+        stats.AppendWithFormat("Batches %u\nViews %u\nLights %u\nShadowmaps %u\nOccluders %u",
             batches,
             renderer->GetNumViews(),
             renderer->GetNumLights(true),
@@ -175,6 +214,7 @@ void DebugHud::Update(float timeStep)
     }
 
     Profiler* profiler = GetSubsystem<Profiler>();
+    
     if (profiler)
     {
         if (profilerTimer_.GetMSec(false) >= profilerInterval_)
@@ -183,13 +223,74 @@ void DebugHud::Update(float timeStep)
 
             if (profilerText_->IsVisible())
             {
-                String profilerOutput = profiler->GetData(false, false, profilerMaxDepth_);
+                String profilerOutput;
+
+                if (profilerMode_ == DEBUG_HUD_PROFILE_PERFORMANCE)
+                {
+                    profilerOutput = profiler->PrintData(false, false, profilerMaxDepth_);
+                }
+                else
+                {
+                    Metrics* metrics = GetSubsystem<Metrics>();
+
+                    if (metrics)
+                    {
+                        if (!metrics->GetEnabled())
+                            metrics->Enable();
+
+                        SharedPtr<MetricsSnapshot> snapshot(new MetricsSnapshot());
+                        metrics->Capture(snapshot);
+                        profilerOutput = snapshot->PrintData(2);
+                    }
+                    else
+                    {
+                        profilerOutput = "Metrics subsystem not found";
+                    }
+
+                }
+
                 profilerText_->SetText(profilerOutput);
             }
 
             profiler->BeginInterval();
         }
     }
+}
+
+void DebugHud::SetProfilerMode(DebugHudProfileMode mode)
+{ 
+    profilerMode_ = mode; 
+
+    if (profilerMode_ == DEBUG_HUD_PROFILE_PERFORMANCE)
+    {
+        if (profilerText_.NotNull())
+        {
+            profilerText_->SetText("");
+            profilerText_->SetFont(profilerText_->GetFont(), 11);
+        }
+    }
+    else
+    {
+        int size = 8;
+
+        Metrics* metrics = GetSubsystem<Metrics>();
+
+        if (!metrics)
+            size = 32;
+        else
+        {
+            // Enable metrics immediately
+            if (!metrics->GetEnabled())
+                metrics->Enable();
+        }
+
+        if (profilerText_.NotNull())
+        {
+            profilerText_->SetText("");
+            profilerText_->SetFont(profilerText_->GetFont(), size);
+        }
+    }
+
 }
 
 void DebugHud::SetDefaultStyle(XMLFile* style)

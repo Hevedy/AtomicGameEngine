@@ -36,75 +36,48 @@ static const unsigned FINDTEXT_FLAG_WRAP = 0x4;
 static const unsigned FINDTEXT_FLAG_NEXT = 0x8;
 static const unsigned FINDTEXT_FLAG_PREV = 0x10;
 
-EVENT(E_FINDTEXT, FindText)
+
+// emitted when the play button has been pressed in the editor, but the player has not yet started
+ATOMIC_EVENT(E_EDITORPLAYREQUEST, EditorPlayRequest)
 {
-    PARAM(P_FLAGS, Flags);    // int
-    PARAM(P_TEXT, Text);      // string
+    ATOMIC_PARAM(P_MODE, Mode);    // uint (AEPlayerMode)
 }
 
-EVENT(E_FINDTEXTCLOSE, FindTextClose)
+// Called when the active resource editor has changed
+ATOMIC_EVENT(E_EDITORRESOURCEEDITORCHANGED, EditorResourceEditorChanged)
 {
-
+    ATOMIC_PARAM(P_RESOURCEEDITOR, ResourceEditor); // ResourceEditor*
 }
-
-EVENT(E_FINDTEXTOPEN, FindTextOpen)
-{
-
-}
-
-EVENT(E_JAVASCRIPTSAVED, JavascriptSaved)
-{
-
-}
-
-// editor play request
-EVENT(E_EDITORPLAYREQUEST, EditorPlayRequest)
-{
-    PARAM(P_MODE, Mode);    // uint (AEPlayerMode)
-
-}
-
-// stop play mode
-EVENT(E_EDITORPLAYSTOP, EditorPlayStop)
-{
-
-}
-
-// stop play mode
-EVENT(E_EDITORRESOURCEEDITORCHANGED, EditorResourceEditorChanged)
-{
-    PARAM(P_RESOURCEEDITOR, ResourceEditor); // ResourceEditor*
-}
-
 
 // emitted once play has started
-EVENT(E_EDITORPLAYERSTARTED, EditorPlayerStarted)
+ATOMIC_EVENT(E_EDITORPLAYERSTARTED, EditorPlayerStarted)
 {
-    PARAM(P_MODE, Mode);    // uint (AEPlayerMode)
+    ATOMIC_PARAM(P_MODE, Mode);    // uint (AEPlayerMode)
 }
 
 // emitted once player has paused
-EVENT(E_EDITORPLAYERPAUSED, EditorPlayerPaused)
+ATOMIC_EVENT(E_EDITORPLAYERPAUSED, EditorPlayerPaused)
 {
 
 }
 
 // emitted once paused player has resumed
-EVENT(E_EDITORPLAYERRESUMED, EditorPlayerResumed)
+ATOMIC_EVENT(E_EDITORPLAYERRESUMED, EditorPlayerResumed)
 {
 
 }
 
 // emitted once play has stopped
-EVENT(E_EDITORPLAYERSTOPPED, EditorPlayerStopped)
+ATOMIC_EVENT(E_EDITORPLAYERSTOPPED, EditorPlayerStopped)
 {
 
 }
 
-EVENT(E_EDITORBUILD, EditorBuild)
+// NOT CURRENTLY WIRED
+ATOMIC_EVENT(E_EDITORBUILD, EditorBuild)
 {
-    PARAM(P_PLATFORM, Platform);      // string
-    PARAM(P_BUILDPATH, BuildPath);    // string
+    ATOMIC_PARAM(P_PLATFORM, Platform);      // string
+    ATOMIC_PARAM(P_BUILDPATH, BuildPath);    // string
 }
 
 
@@ -113,59 +86,152 @@ EVENT(E_EDITORBUILD, EditorBuild)
 static const unsigned EDITOR_MODALERROR = 0x1;
 static const unsigned EDITOR_MODALINFO = 0x2;
 
-
-EVENT(E_EDITORMODAL, EditorModal)
+// emitted to display a modal message in the editor
+ATOMIC_EVENT(E_EDITORMODAL, EditorModal)
 {
-    PARAM(P_TYPE, Type);      // uint (EDITOR_ERROR_MODAL, etc)
-    PARAM(P_TITLE, Title);      // for modal errors, title text
-    PARAM(P_MESSAGE, Message);    // for modal errors, error text
+    ATOMIC_PARAM(P_TYPE, Type);      // uint (Type can be EDITOR_MODALERROR, EDITOR_MODAL_INFOT)
+    ATOMIC_PARAM(P_TITLE, Title);      // string (for modal errors, title text)
+    ATOMIC_PARAM(P_MESSAGE, Message);    // string (for modal errors, error text)
 }
 
-EVENT(E_EDITORACTIVESCENEEDITORCHANGE, EditorActiveSceneEditorChange)
+// emitted when a Scene editor gains focus.  Could be null.
+ATOMIC_EVENT(E_EDITORACTIVESCENEEDITORCHANGE, EditorActiveSceneEditorChange)
 {
-    PARAM(P_SCENEEDITOR, SceneEditor);
+    ATOMIC_PARAM(P_SCENEEDITOR, SceneEditor);  // SceneEditor3D pointer
 }
 
-
-EVENT(E_PLAYERERROR, PlayerError)
+// NOTE: This is not triggered by anything
+ATOMIC_EVENT(E_EDITORSCENECLOSED, EditorSceneClosed)
 {
-    PARAM(P_TEXT, Text);      // string
+    ATOMIC_PARAM(P_SCENE, Scene); // Scene pointer
 }
 
-EVENT(E_CONSOLEMESSAGE, ConsoleMessage)
+// emitted when a subprocess logs information to the console
+ATOMIC_EVENT(E_SUBPROCESSOUTPUT, SubprocessOutput)
 {
-    PARAM(P_TEXT, Text);      // string
+    ATOMIC_PARAM(P_TEXT, Text);      // string
 }
 
-EVENT(E_CONSOLEERRORMESSAGE, ConsoleErrorMessage)
+// emitted when a subprocess has completed
+ATOMIC_EVENT(E_SUBPROCESSCOMPLETE, SubprocessComplete)
 {
-    PARAM(P_TEXT, Text);      // string
+    ATOMIC_PARAM(P_PROCESSKEY, ProcessKey); // unsigned
+    ATOMIC_PARAM(P_RETCODE, RetCode);      // int (return code of process)
 }
 
-EVENT(E_PLATFORMCHANGE, PlatformChange)
+// Command called to load a new project
+ATOMIC_EVENT(E_EDITORLOADPROJECT, EditorLoadProject)
 {
-    PARAM(P_PLATFORM, Platform);      // uint (AEEditorPlatform)
+    ATOMIC_PARAM(P_PATH, Path);     // string
 }
 
-EVENT(E_SUBPROCESSOUTPUT, SubprocessOutput)
+// emitted once a content folder has been refreshed
+ATOMIC_EVENT(E_CONTENTFOLDERCHANGED, ContentFolderChanged)
 {
-    PARAM(P_TEXT, Text);      // string
+    ATOMIC_PARAM(P_PATH, Path);     // string
 }
 
-EVENT(E_SUBPROCESSCOMPLETE, SubprocessComplete)
+// emitted when the editor has been requested to close the current project.
+ATOMIC_EVENT(E_EDITORCLOSEPROJECT, EditorCloseProject)
 {
-    PARAM(P_PROCESSKEY, ProcessKey); // unsigned
-    PARAM(P_RETCODE, RetCode);      // int (return code of process)
+
 }
 
-EVENT(E_CURLCOMPLETE, CurlComplete)
+// emitted once a project has completed closing
+ATOMIC_EVENT(E_EDITORPROJECTCLOSED, EditorProjectClosed)
 {
-    PARAM(P_CURLREQUEST, Request);      // CurlRequest*
+
 }
 
-EVENT(E_EDITORSHUTDOWN, EditorShutdown)
+// command to save all the open editors
+ATOMIC_EVENT(E_EDITORSAVEALLRESOURCES, EditorSaveAllResources)
 {
 
+}
+
+// command to save a specific resource
+ATOMIC_EVENT(E_EDITORSAVERESOURCE, EditorSaveResource)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string full path of the current resource
+}
+
+// emitted once the resource has been saved
+ATOMIC_EVENT(E_EDITORSAVERESOURCENOTIFICATION, EditorSaveResourceNotification)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string
+}
+
+// emitted when a resource gains focus
+ATOMIC_EVENT(E_EDITOREDITRESOURCE, EditorEditResource)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string
+    ATOMIC_PARAM(P_LINENUMBER, LineNumber); // int optional
+}
+
+// command to delete a resource
+ATOMIC_EVENT(E_EDITORDELETERESOURCE, EditorDeleteResource)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string
+}
+
+// emitted once the resource has been deleted
+ATOMIC_EVENT(E_EDITORDELETERESOURCENOTIFICATION, EditorDeleteResourceNotification)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string
+}
+
+// emitted when a resource has been renamed
+ATOMIC_EVENT(E_EDITORRENAMERESOURCENOTIFICATION, EditorRenameResourceNotification)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string (full path of the old resource)
+    ATOMIC_PARAM(P_NEWPATH, NewPath);   // string (full path of the new resource)
+    ATOMIC_PARAM(P_NEWNAME, NewName);    // string (new name of resource)
+    ATOMIC_PARAM(P_ASSET, Asset);       // ToolCore.Asset pointer
+}
+
+// emitted when user preferences have been changed
+ATOMIC_EVENT(E_USERPREFERENCESCHANGEDNOTIFICATION, UserPreferencesChangedNotification)
+{
+   ATOMIC_PARAM(P_PROJECTPREFERENCES, ProjectPreferences);  // string (JSON object)
+   ATOMIC_PARAM(P_APPLICATIONPREFERENCES, ApplicationPreferences);        // string (JSON object)
+}
+
+// emitted when an item is selected in a scene
+ATOMIC_EVENT(E_INSPECTORPROJECTREFERENCE, InspectorProjectReference)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string (Full path of the resource to edit)
+}
+
+// emitted when a component attribute has been changed
+ATOMIC_EVENT(E_ATTRIBUTEEDITRESOURCECHANGED, AttributeEditResourceChanged)
+{
+    ATOMIC_PARAM(P_ATTRINFOEDIT, AttrInfoEdit); // AttrbuteInfoEdit window
+    ATOMIC_PARAM(P_RESOURCE, Resource); // Resource pointer
+}
+
+// emitted when the built in player logs something
+ATOMIC_EVENT(E_EDITORPLAYERLOG, EditorPlayerLog)
+{
+    ATOMIC_PARAM(P_MESSAGE, Message);   // string
+    ATOMIC_PARAM(P_LEVEL, Level);       // int
+}
+
+// emitted right before a project is unloaded
+ATOMIC_EVENT(E_PROJECTUNLOADEDNOTIFICATION, ProjectUnloadedNotification)
+{
+
+}
+
+// command to load a new project
+ATOMIC_EVENT(E_REQUESTPROJECTLOAD, RequestProjectLoad)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string (Full path to the .atomic file)
+}
+
+// emitted once a project has been loaded
+ATOMIC_EVENT(E_LOADPROJECTNOTIFICATION,LoadProjectNotification)
+{
+    ATOMIC_PARAM(P_PATH, Path);     // string (Full path to the .atomic file)
 }
 
 }

@@ -26,11 +26,11 @@
 #include <Atomic/IO/FileSystem.h>
 #include <Atomic/Scene/Node.h>
 
-#include <Atomic/Atomic3D/AnimatedModel.h>
-#include <Atomic/Atomic3D/Animation.h>
-#include <Atomic/Atomic3D/AnimationController.h>
-#include <Atomic/Atomic3D/StaticModel.h>
-#include <Atomic/Atomic3D/Model.h>
+#include <Atomic/Graphics/AnimatedModel.h>
+#include <Atomic/Graphics/Animation.h>
+#include <Atomic/Graphics/AnimationController.h>
+#include <Atomic/Graphics/StaticModel.h>
+#include <Atomic/Graphics/Model.h>
 
 #include <Atomic/Resource/ResourceCache.h>
 #include <Atomic/Resource/XMLFile.h>
@@ -47,6 +47,8 @@ namespace ToolCore
 /// Node + Model (static or animated)
 ModelImporter::ModelImporter(Context* context, Asset *asset) : AssetImporter(context, asset)
 {
+    requiresCacheFile_ = true;
+
     SetDefaults();
 }
 
@@ -58,9 +60,12 @@ ModelImporter::~ModelImporter()
 void ModelImporter::SetDefaults()
 {
     AssetImporter::SetDefaults();
+    SharedPtr<OpenAssetImporter> importer(new OpenAssetImporter(context_));
 
     scale_ = 1.0;
     importAnimations_ = false;
+    importMaterials_ = importer->GetImportMaterialsDefault();
+    includeNonSkinningBones_ = importer->GetIncludeNonSkinningBones();
     animationInfo_.Clear();
 
 }
@@ -68,7 +73,7 @@ void ModelImporter::SetDefaults()
 bool ModelImporter::ImportModel()
 {
 
-    LOGDEBUGF("Importing Model: %s", asset_->GetPath().CString());
+    ATOMIC_LOGDEBUGF("Importing Model: %s", asset_->GetPath().CString());
 
     SharedPtr<OpenAssetImporter> importer(new OpenAssetImporter(context_));
 
@@ -77,6 +82,8 @@ bool ModelImporter::ImportModel()
     importer->SetScale(scale_);
     importer->SetExportAnimations(false);
     importer->SetImportNode(importNode_);
+    importer->SetImportMaterials(importMaterials_);
+    importer->SetIncludeNonSkinningBones(includeNonSkinningBones_);
 
     if (importer->Load(asset_->GetPath()))
     {
@@ -91,6 +98,13 @@ bool ModelImporter::ImportModel()
 
     return false;
 }
+
+/*void ModelImporter::SetImportMaterials(bool importMat)
+{
+    LOGDEBUGF("Importing Materials of: %s", asset_->GetPath().CString());
+    SharedPtr<OpenAssetImporter> importer(new OpenAssetImporter(context_));
+    importer->SetImportMaterials(importMat);
+}*/
 
 bool ModelImporter::ImportAnimation(const String& filename, const String& name, float startTime, float endTime)
 {
@@ -121,14 +135,17 @@ bool ModelImporter::ImportAnimation(const String& filename, const String& name, 
 
             AnimatedModel* animatedModel = importNode_->GetComponent<AnimatedModel>();
             AnimationController* controller = importNode_->GetComponent<AnimationController>();
-            if (animatedModel && controller)
+            if (!controller)
             {
-                SharedPtr<Animation> animation = cache->GetTempResource<Animation>(fileName + extension);
-                if (animation)
-                    controller->AddAnimationResource(animation);
+                importNode_->CreateComponent<AnimationController>();
+                controller = importNode_->GetComponent<AnimationController>();
             }
+            SharedPtr<Animation> animation = cache->GetTempResource<Animation>(fileName + extension);
 
-            LOGINFOF("Import Info: %s : %s", info.name_.CString(), fileName.CString());
+            if (animation)
+                controller->AddAnimationResource(animation);
+
+            ATOMIC_LOGINFOF("Import Info: %s : %s", info.name_.CString(), fileName.CString());
         }
 
         return true;
@@ -257,6 +274,7 @@ bool ModelImporter::Import()
                 ImportAnimations();
             }
 
+            SetImportMaterials(importMaterials_);
         }
     }
 
@@ -322,6 +340,31 @@ void ModelImporter::GetAnimations(PODVector<Animation*>& animations)
             animations.Push(animresources[i]);
         }
     }
+
+}
+
+void ModelImporter::GetAssetCacheMap(HashMap<String, String>& assetMap)
+{
+    if (asset_.Null())
+        return;
+
+    String assetPath = asset_->GetRelativePath().ToLower();
+
+    String cachePath = asset_->GetGUID().ToLower();
+
+    // Default is load node xml
+    assetMap["Node;" + assetPath] = cachePath;
+    assetMap["Model;" + assetPath] = cachePath + ".mdl";
+
+    PODVector<Animation*> animations;
+
+    GetAnimations(animations);
+
+    for (unsigned i = 0; i < animations.Size(); i++)
+    {
+        Animation* anim = animations[i];
+        assetMap["Animation;" + anim->GetAnimationName().ToLower() + "@" + assetPath] = cachePath + "_" + anim->GetAnimationName() + ".ani";
+    }
 }
 
 bool ModelImporter::LoadSettingsInternal(JSONValue& jsonRoot)
@@ -338,6 +381,15 @@ bool ModelImporter::LoadSettingsInternal(JSONValue& jsonRoot)
 
     if (import.Get("importAnimations").IsBool())
         importAnimations_ = import.Get("importAnimations").GetBool();
+
+    if (import.Get("importMaterials").IsBool())
+    {
+        importMaterials_ = import.Get("importMaterials").GetBool();
+    }
+    else
+    {
+
+    }
 
     if (import.Get("animInfo").IsArray())
     {
@@ -368,6 +420,7 @@ bool ModelImporter::SaveSettingsInternal(JSONValue& jsonRoot)
     JSONValue save;
     save.Set("scale", scale_);
     save.Set("importAnimations", importAnimations_);
+    save.Set("importMaterials", importMaterials_);
 
     JSONArray animInfo;
 

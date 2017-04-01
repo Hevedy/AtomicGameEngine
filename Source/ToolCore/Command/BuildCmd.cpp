@@ -28,6 +28,7 @@
 #include "../Project/Project.h"
 #include "../Build/BuildEvents.h"
 #include "../Build/BuildSystem.h"
+#include "../Build/AssetBuildConfig.h"
 
 #include "BuildCmd.h"
 #include <Poco/File.h>
@@ -45,7 +46,7 @@ BuildCmd::~BuildCmd()
 
 }
 
-bool BuildCmd::Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg)
+bool BuildCmd::ParseInternal(const Vector<String>& arguments, unsigned startIndex, String& errorMsg)
 {
     String argument = arguments[startIndex].ToLower();
     String value = startIndex + 1 < arguments.Size() ? arguments[startIndex + 1] : String::EMPTY;
@@ -64,6 +65,33 @@ bool BuildCmd::Parse(const Vector<String>& arguments, unsigned startIndex, Strin
 
     buildPlatform_ = value.ToLower();
 
+    for (int i = startIndex + 2; i < arguments.Size(); ++i)
+    {
+        String option = arguments[i].ToLower();
+        
+        if (option == "-tag")
+        {
+            if (arguments.Size() == i + 1)
+            {
+                errorMsg = "Missing tag";
+                return false;
+            }
+        }
+        else if (option == "-autolog")
+        {
+            autoLog_ = true;
+        }
+        else
+        {
+            errorMsg = "Invalid option: " + option;
+            return false;
+        }
+    }
+
+    String tag = startIndex + 2 < arguments.Size() ? arguments[startIndex + 2] : String::EMPTY;
+
+    assetsBuildTag_ = tag.ToLower();
+
     return true;
 }
 
@@ -78,9 +106,11 @@ void BuildCmd::HandleBuildComplete(StringHash eventType, VariantMap& eventData)
 
 }
 
+
+
 void BuildCmd::Run()
 {
-    LOGINFOF("Building project for: %s", buildPlatform_.CString());
+    ATOMIC_LOGINFOF("Building project for: %s", buildPlatform_.CString());
 
     ToolSystem* tsystem = GetSubsystem<ToolSystem>();
     Project* project = tsystem->GetProject();
@@ -95,21 +125,20 @@ void BuildCmd::Run()
         return;
     }
 
-    if (!project->ContainsPlatform(platform->GetPlatformID()))
-    {
-        Error(ToString("Project does not contain platform: %s", buildPlatform_.CString()));
-        return;
-    }
-
     // create the build
     BuildBase* buildBase = platform->NewBuild(project);
+    if (!assetsBuildTag_.Empty())
+    {
+        buildBase->SetAssetBuildTag(assetsBuildTag_);
+    }
+    buildBase->SetAutoLog(autoLog_);
 
     // add it to the build system
     BuildSystem* buildSystem = GetSubsystem<BuildSystem>();
 
     buildSystem->QueueBuild(buildBase);
 
-    SubscribeToEvent(E_BUILDCOMPLETE, HANDLER(BuildCmd, HandleBuildComplete));
+    SubscribeToEvent(E_BUILDCOMPLETE, ATOMIC_HANDLER(BuildCmd, HandleBuildComplete));
 
     // TODO: parallel/serial builds
     buildSystem->StartNextBuild();

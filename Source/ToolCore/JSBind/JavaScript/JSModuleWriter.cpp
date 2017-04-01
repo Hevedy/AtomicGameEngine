@@ -29,7 +29,7 @@
 #include "../JSBEnum.h"
 #include "../JSBClass.h"
 #include "../JSBFunction.h"
-
+#include "../JSBEvent.h"
 
 #include "JSModuleWriter.h"
 #include "JSClassWriter.h"
@@ -44,7 +44,7 @@ JSModuleWriter::JSModuleWriter(JSBModule *module) : JSBModuleWriter(module)
 
 void JSModuleWriter::WriteForwardDeclarations(String& source)
 {
-    Vector<SharedPtr<JSBClass>> classes = module_->classes_.Values();
+    Vector<SharedPtr<JSBClass>> classes = module_->GetClasses();
 
     for (unsigned i = 0; i < classes.Size(); i++)
     {
@@ -61,7 +61,7 @@ void JSModuleWriter::WriteForwardDeclarations(String& source)
 
 void JSModuleWriter::WriteClassDeclaration(String& source)
 {
-    Vector<SharedPtr<JSBClass>> classes = module_->classes_.Values();
+    Vector<SharedPtr<JSBClass>> classes = module_->GetClasses();
 
     source += "static void jsb_declare_classes(JSVM* vm)\n{\n";
 
@@ -91,13 +91,13 @@ void JSModuleWriter::WriteClassDeclaration(String& source)
 
                 source.Append("duk_push_object(ctx);\n");
 
-                if (prop->getter_ && !prop->getter_->Skip())
+                if (prop->getter_ && !prop->getter_->Skip(BINDINGLANGUAGE_JAVASCRIPT))
                 {
                     source.AppendWithFormat("duk_push_c_function(ctx, jsb_class_%s_%s, 0);\n",
                                             klass->GetName().CString(), prop->getter_->GetName().CString());
                     source.Append("duk_put_prop_string(ctx, -2, \"get\");\n");
                 }
-                if (prop->setter_ && !prop->setter_->Skip())
+                if (prop->setter_ && !prop->setter_->Skip(BINDINGLANGUAGE_JAVASCRIPT))
                 {
                     source.AppendWithFormat("duk_push_c_function(ctx, jsb_class_%s_%s, 1);\n",
                                             klass->GetName().CString(), prop->setter_->GetName().CString());
@@ -139,10 +139,12 @@ void JSModuleWriter::WriteIncludes(String& source)
         eitr++;
     }
 
-    HashMap<StringHash, SharedPtr<JSBClass> >::Iterator citr = module_->classes_.Begin();
-    while (citr != module_->classes_.End())
+    Vector<SharedPtr<JSBClass>> classes = module_->GetClasses();
+
+    Vector<SharedPtr<JSBClass>>::Iterator citr = classes.Begin();
+    while (citr != classes.End())
     {
-        allheaders.Push(citr->second_->GetHeader());
+        allheaders.Push((*citr)->GetHeader());
         citr++;
     }
 
@@ -170,9 +172,25 @@ void JSModuleWriter::WriteIncludes(String& source)
 
 }
 
+void JSModuleWriter::WritePreamble(String& source)
+{
+    if (!module_->jsmodulePreamble_.Size())
+        return;
+
+    source += "\n// Begin Module Preamble\n\n";
+
+    for (unsigned i = 0; i < module_->jsmodulePreamble_.Size(); i++)
+    {
+        source += module_->jsmodulePreamble_[i] + "\n";
+    }
+
+    source += "\n// End Module Preamble\n\n";
+
+}
+
 void JSModuleWriter::WriteClassDefine(String& source)
 {
-    Vector<SharedPtr<JSBClass>> classes = module_->classes_.Values();
+    Vector<SharedPtr<JSBClass>> classes = module_->GetClasses();
 
     source += "static void jsb_init_classes(JSVM* vm)\n{\n";
 
@@ -212,22 +230,54 @@ void JSModuleWriter::WriteModulePreInit(String& source)
 
         HashMap<String, String>::ConstIterator itr = values.Begin();
 
+        // Legacy mode - this should be removed at some point
         while (itr != values.End())
         {
             String name = (*itr).first_;
-            source.AppendWithFormat("duk_push_number(ctx, (double) %s);\n", name.CString());
+            source.AppendWithFormat("duk_push_number(ctx, %s);\n", name.CString());
             source.AppendWithFormat("duk_put_prop_string(ctx, -2, \"%s\");\n",name.CString());
             itr++;
         }
+
+        // Preferred way - built-in enum
+        itr = values.Begin();
+        source.Append("duk_push_object(ctx);\n");
+        source.Append("duk_dup(ctx, -1);\n");
+        source.AppendWithFormat("duk_put_prop_string(ctx, -3, \"%s\");\n", jenum->GetName().CString());
+        while (itr != values.End())
+        {
+            String name = (*itr).first_;
+            source.AppendWithFormat("duk_push_number(ctx, %s);\n", name.CString());
+            source.AppendWithFormat("duk_put_prop_string(ctx, -2, \"%s\");\n",name.CString());
+            itr++;
+        }
+        source.Append("duk_pop(ctx);\n");
     }
+
     source += "// constants\n";
 
     Vector<String> constants = module_->constants_.Keys();
 
     for (unsigned i = 0; i < constants.Size(); i++)
-    {
-        source.AppendWithFormat("duk_push_number(ctx, (double) %s);\n", constants.At(i).CString());
+    {       // use char primitive type to signify a const string constant 
+        if ( module_->constants_[ constants.At(i) ].type->ToString() == "char" )
+            source.AppendWithFormat("duk_push_string(ctx, \"%s\");\n", constants.At(i).CString() );
+        else
+            source.AppendWithFormat("duk_push_number(ctx, (double) %s);\n", constants.At(i).CString());
+
         source.AppendWithFormat("duk_put_prop_string(ctx, -2, \"%s\");\n", constants.At(i).CString());
+    }
+
+    source += "// events\n";
+
+    const Vector<SharedPtr<JSBEvent>>& events = module_->GetEvents();
+
+    for (unsigned i = 0; i < events.Size(); i++)
+    {
+        source.AppendWithFormat("duk_push_string(ctx, \"%s\");\n", events[i]->GetEventName().CString());
+        source.AppendWithFormat("duk_put_prop_string(ctx, -2, \"%sType\");\n", events[i]->GetScriptEventName(BINDINGLANGUAGE_JAVASCRIPT).CString());
+
+        source.AppendWithFormat("js_define_native_event(ctx, \"%s\", \"%s\");\n", events[i]->GetEventName().CString(), events[i]->GetScriptEventName(BINDINGLANGUAGE_JAVASCRIPT).CString());
     }
 
     source += "duk_pop(ctx);\n";
@@ -247,6 +297,13 @@ void JSModuleWriter::GenerateSource()
 {
     String source = "// This file was autogenerated by JSBind, changes will be lost\n";
 
+    String moduleGuard = module_->GetModuleDefineGuard();
+
+    if (moduleGuard.Length())
+    {
+        source += ToString("\n%s\n", moduleGuard.CString());
+    }
+
     source += "#ifdef ATOMIC_PLATFORM_WINDOWS\n";
 
     source += "#pragma warning(disable: 4244) // possible loss of data\n";
@@ -259,10 +316,13 @@ void JSModuleWriter::GenerateSource()
     }
 
     source += "#include <Duktape/duktape.h>\n";
+    source += "#include <Atomic/Script/ScriptVector.h>\n";
     source += "#include <AtomicJS/Javascript/JSVM.h>\n";
     source += "#include <AtomicJS/Javascript/JSAPI.h>\n";
 
     WriteIncludes(source);
+
+    WritePreamble(source);
 
     String ns = module_->GetPackage()->GetNamespace();
 
@@ -281,7 +341,7 @@ void JSModuleWriter::GenerateSource()
 
     source += "// Begin Classes\n";
 
-    Vector<SharedPtr<JSBClass>> classes = module_->classes_.Values();
+    Vector<SharedPtr<JSBClass>> classes = module_->GetClasses();
 
     for (unsigned i = 0; i < classes.Size(); i++)
     {
@@ -305,6 +365,12 @@ void JSModuleWriter::GenerateSource()
     if (module_->Requires("3D"))
     {
         source += "#endif //ATOMIC_3D\n";
+    }
+
+
+    if (moduleGuard.Length())
+    {
+        source += ToString("\n#endif\n", moduleGuard.CString());
     }
 
     JSBind* jsbind = module_->GetSubsystem<JSBind>();

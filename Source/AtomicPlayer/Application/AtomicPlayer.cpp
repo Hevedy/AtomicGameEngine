@@ -40,11 +40,6 @@
 
 #include <AtomicJS/Javascript/Javascript.h>
 
-#ifdef ATOMIC_DOTNET
-#include <AtomicNET/NETCore/NETCore.h>
-#include <AtomicNET/NETCore/NETHost.h>
-#endif
-
 #include <AtomicPlayer/Player.h>
 
 #include "AtomicPlayer.h"
@@ -55,7 +50,7 @@
 #include <unistd.h>
 #endif
 
-DEFINE_APPLICATION_MAIN(AtomicPlayer::AtomicPlayerApp)
+ATOMIC_DEFINE_APPLICATION_MAIN(AtomicPlayer::AtomicPlayerApp)
 
 namespace AtomicPlayer
 {
@@ -103,12 +98,12 @@ void AtomicPlayerApp::Setup()
 #if ATOMIC_PLATFORM_WINDOWS || ATOMIC_PLATFORM_LINUX
 
     engineParameters_.InsertNew("WindowIcon", "Images/AtomicLogo32.png");
-    engineParameters_.InsertNew("ResourcePrefixPath", "AtomicPlayer_Resources");
+    engineParameters_.InsertNew("ResourcePrefixPaths", "AtomicPlayer_Resources");
 
 #elif ATOMIC_PLATFORM_ANDROID
-    //engineParameters_.InsertNew("ResourcePrefixPath"], "assets");
+    //engineParameters_.InsertNew("ResourcePrefixPaths"], "assets");
 #elif ATOMIC_PLATFORM_OSX
-    engineParameters_.InsertNew("ResourcePrefixPath", "../Resources");
+    engineParameters_.InsertNew("ResourcePrefixPaths", filesystem->GetProgramDir() + "../Resources");
 #endif
 
     const Vector<String>& arguments = GetArguments();
@@ -122,7 +117,7 @@ void AtomicPlayerApp::Setup()
 
             if (argument == "--log-std")
             {
-                SubscribeToEvent(E_LOGMESSAGE, HANDLER(AtomicPlayerApp, HandleLogMessage));
+                SubscribeToEvent(E_LOGMESSAGE, ATOMIC_HANDLER(AtomicPlayerApp, HandleLogMessage));
             }
         }
     }
@@ -148,7 +143,7 @@ void AtomicPlayerApp::Start()
     ui->Initialize("DefaultUI/language/lng_en.tb.txt");
     ui->LoadDefaultPlayerSkin();
 
-    SubscribeToEvent(E_JSERROR, HANDLER(AtomicPlayerApp, HandleJSError));
+    SubscribeToEvent(E_JSERROR, ATOMIC_HANDLER(AtomicPlayerApp, HandleJSError));
 
     vm_->SetModuleSearchPaths("Modules");
 
@@ -157,39 +152,6 @@ void AtomicPlayerApp::Start()
     AtomicPlayer::jsapi_init_atomicplayer(vm_);
 
     JSVM* vm = JSVM::GetJSVM(0);
-
-#ifdef ATOMIC_DOTNET
-
-    // Instantiate and register the AtomicNET subsystem
-    SharedPtr<NETCore> netCore (new NETCore(context_));
-    context_->RegisterSubsystem(netCore);
-    String netCoreErrorMsg;
-
-#ifdef ATOMIC_PLATFORM_WINDOWS
-
-    String rootNETDir = fileSystem->GetProgramDir() + "AtomicPlayer_Resources/AtomicNET/";
-
-#else
-
-    String rootNETDir = fileSystem->GetProgramDir() + "AtomicPlayer_Resources/AtomicNET/";
-
-#endif
-
-    NETHost::SetCoreCLRFilesAbsPath(GetNativePath(rootNETDir + "CoreCLR/"));
-    NETHost::SetCoreCLRTPAPaths(GetNativePath(rootNETDir + "Atomic/TPA/"));
-    NETHost::SetCoreCLRAssemblyLoadPaths(GetNativePath(rootNETDir + "Atomic/Assemblies/"));
-
-    if (!netCore->Initialize(netCoreErrorMsg))
-    {
-        LOGERRORF("NetCore: Unable to initialize! %s", netCoreErrorMsg.CString());
-        context_->RemoveSubsystem(NETCore::GetTypeStatic());
-    }
-    else
-    {
-
-    }
-#endif
-
 
     if (!vm->ExecuteMain())
     {
@@ -265,7 +227,12 @@ void AtomicPlayerApp::HandleJSError(StringHash eventType, VariantMap& eventData)
 void AtomicPlayerApp::ReadEngineConfig()
 {
     FileSystem* fileSystem = GetSubsystem<FileSystem>();
+
+#ifdef ATOMIC_PLATFORM_OSX
+    String filename = fileSystem->GetProgramDir() + "../Resources/Settings/Engine.json";
+#else
     String filename = fileSystem->GetProgramDir() + "Settings/Engine.json";
+#endif
 
     if (!fileSystem->FileExists(filename))
         return;

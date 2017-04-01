@@ -21,8 +21,6 @@
 //
 
 import ScriptWidget = require("ui/ScriptWidget");
-import EditorEvents = require("editor/EditorEvents");
-import UIEvents = require("ui/UIEvents");
 import ResourceEditorProvider from "../ResourceEditorProvider";
 
 // the root content of editor widgets (rootContentWidget property) are extended with an editor field
@@ -53,19 +51,19 @@ class ResourceFrame extends ScriptWidget {
 
     }
 
-    handleSaveResource(ev: EditorEvents.SaveResourceEvent) {
+    handleSaveResource(ev: Editor.EditorSaveResourceEvent) {
 
         if (this.currentResourceEditor) {
             this.currentResourceEditor.save();
             // Grab the path to this file and pass it to the save resource
-            this.sendEvent(EditorEvents.SaveResourceNotification, {
+            this.sendEvent(Editor.EditorSaveResourceNotificationEventData({
                 path: ev.path || this.currentResourceEditor.fullPath
-            });
+            }));
         }
 
     }
 
-    handleDeleteResource(ev: EditorEvents.DeleteResourceEvent) {
+    handleDeleteResource(ev: Editor.EditorDeleteResourceEvent) {
         var editor = this.editors[ev.path];
         if (editor) {
             editor.close(true);
@@ -73,30 +71,30 @@ class ResourceFrame extends ScriptWidget {
         }
     }
 
-    handleSaveAllResources(data) {
+    handleSaveAllResources() {
 
         for (var i in this.editors) {
             this.editors[i].save();
-            this.sendEvent(EditorEvents.SaveResourceNotification, {
+            this.sendEvent(Editor.EditorSaveResourceNotificationEventData({
                 path: this.editors[i].fullPath
-            });
+            }));
         }
 
     }
 
-    handleEditResource(ev: EditorEvents.EditResourceEvent) {
+    handleEditResource(ev: Editor.EditorEditResourceEvent) {
 
         var path = ev.path;
 
         if (this.editors[path]) {
 
-            this.navigateToResource(path);
+            this.navigateToResource(path, ev.lineNumber);
 
             return;
 
         }
 
-        var editor = this.resourceEditorProvider.getEditor(ev.path, this.tabcontainer);
+        var editor = this.resourceEditorProvider.getEditor(ev.path, this.tabcontainer, ev.lineNumber);
         if (editor) {
 
             // cast and add editor lookup on widget itself
@@ -119,7 +117,10 @@ class ResourceFrame extends ScriptWidget {
 
         var editor = this.editors[fullpath];
 
-        if (this.currentResourceEditor == editor) return;
+        if (this.currentResourceEditor == editor) {
+            this.setCursorPositionInEditor(editor, lineNumber, tokenPos);
+            return;
+        }
 
         var root = this.tabcontainer.contentRoot;
 
@@ -137,21 +138,33 @@ class ResourceFrame extends ScriptWidget {
 
             editor.setFocus();
 
-            // this cast could be better
-            var ext = Atomic.getExtension(fullpath);
-
-            if (ext == ".js" && lineNumber != -1) {
-                (<Editor.JSResourceEditor>editor).gotoLineNumber(lineNumber);
-            }
-            else if (ext == ".js" && tokenPos != -1) {
-                (<Editor.JSResourceEditor>editor).gotoTokenPos(tokenPos);
-            }
-
+            this.setCursorPositionInEditor(editor, lineNumber, tokenPos);
         }
 
     }
 
-    handleCloseResource(ev: EditorEvents.EditorCloseResourceEvent) {
+    /**
+     * 
+     * Set the cursor to the correct line number in the editor
+     * @param {Editor.ResourceEditor} editor
+     * @param {any} [lineNumber=-1]
+     * @param {any} [tokenPos=-1]
+     * 
+     * @memberOf ResourceFrame
+     */
+    setCursorPositionInEditor(editor: Editor.ResourceEditor, lineNumber = -1, tokenPos = -1) {
+        if (editor instanceof Editor.JSResourceEditor) {
+            if (lineNumber != -1) {
+                (<Editor.JSResourceEditor>editor).gotoLineNumber(lineNumber);
+            }
+
+            if (tokenPos != -1) {
+                (<Editor.JSResourceEditor>editor).gotoTokenPos(tokenPos);
+            }
+        }
+    }
+
+    handleCloseResource(ev: Editor.EditorResourceCloseEvent) {
         this.wasClosed = false;
         var editor = ev.editor;
         var navigate = ev.navigateToAvailableResource;
@@ -161,16 +174,11 @@ class ResourceFrame extends ScriptWidget {
 
         editor.unsubscribeFromAllEvents();
 
+        (<EditorRootContentWidget> editor.rootContentWidget).editor = null;
+
         var editors = Object.keys(this.editors);
 
         var closedIndex = editors.indexOf(editor.fullPath);
-
-        if (editor.typeName == "SceneEditor3D") {
-
-            this.sendEvent(EditorEvents.ActiveSceneEditorChange, { sceneEditor: (<Editor.SceneEditor3D> null) });
-
-        }
-
 
         // remove from lookup
         delete this.editors[editor.fullPath];
@@ -198,14 +206,14 @@ class ResourceFrame extends ScriptWidget {
 
     }
 
-    handleResourceEditorChanged(data) {
+    handleResourceEditorChanged(data: Editor.EditorResourceEditorChangedEvent) {
 
-        var editor = <Editor.ResourceEditor> data.editor;
+        var editor = data.resourceEditor;
         this.currentResourceEditor = editor;
 
     }
 
-    handleRenameResource(ev:EditorEvents.RenameResourceEvent) {
+    handleRenameResource(ev:Editor.EditorRenameResourceNotificationEvent) {
         var editor = this.editors[ev.path];
         if (editor) {
             this.editors[ev.newPath] = editor;
@@ -215,7 +223,8 @@ class ResourceFrame extends ScriptWidget {
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent) {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_TAB_CHANGED && ev.target == this.tabcontainer) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_TAB_CHANGED && ev.target == this.tabcontainer) {
+
             var w = <EditorRootContentWidget> this.tabcontainer.currentPageWidget;
 
             if (w && w.editor) {
@@ -224,11 +233,11 @@ class ResourceFrame extends ScriptWidget {
 
                     if (w.editor.typeName == "SceneEditor3D") {
 
-                        this.sendEvent(EditorEvents.ActiveSceneEditorChange, { sceneEditor: (<Editor.SceneEditor3D> w.editor) });
+                        this.sendEvent(Editor.EditorActiveSceneEditorChangeEventData({ sceneEditor: (<Editor.SceneEditor3D> w.editor) }));
 
                     }
 
-                    this.sendEvent(UIEvents.ResourceEditorChanged, { editor: w.editor });
+                    this.sendEvent(Editor.EditorResourceEditorChangedEventData({ resourceEditor: w.editor }));
 
                 }
 
@@ -236,7 +245,7 @@ class ResourceFrame extends ScriptWidget {
 
         }
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_POINTER_UP) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_POINTER_UP) {
             this.wasClosed = false;
         }
 
@@ -250,7 +259,7 @@ class ResourceFrame extends ScriptWidget {
         // on exit close all open editors
         for (var path in this.editors) {
 
-            this.sendEvent(EditorEvents.EditorResourceClose, { editor: this.editors[path], navigateToAvailableResource: false });
+            this.sendEvent(Editor.EditorResourceCloseEventData({ editor: this.editors[path], navigateToAvailableResource: false }));
 
         }
 
@@ -260,7 +269,7 @@ class ResourceFrame extends ScriptWidget {
 
       for (var i in this.editors) {
           var editor = this.editors[i];
-           this.sendEvent(EditorEvents.EditorResourceClose, { editor: editor, navigateToAvailableResource: false });
+           this.sendEvent(Editor.EditorResourceCloseEventData({ editor: editor, navigateToAvailableResource: false }));
            editor.close();
       }
 
@@ -272,7 +281,7 @@ class ResourceFrame extends ScriptWidget {
 
         this.load("AtomicEditor/editor/ui/resourceframe.tb.txt");
 
-        this.gravity = Atomic.UI_GRAVITY_ALL;
+        this.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_ALL;
 
         this.resourceViewContainer = <Atomic.UILayout> parent.getWidget("resourceviewcontainer");
         this.tabcontainer = <Atomic.UITabContainer> this.getWidget("tabcontainer");
@@ -282,17 +291,17 @@ class ResourceFrame extends ScriptWidget {
         this.resourceEditorProvider = new ResourceEditorProvider(this);
         this.resourceEditorProvider.loadStandardEditors();
 
-        this.subscribeToEvent(EditorEvents.ProjectUnloadedNotification, (data) => this.handleProjectUnloaded(data));
-        this.subscribeToEvent(EditorEvents.EditResource, (data) => this.handleEditResource(data));
-        this.subscribeToEvent(EditorEvents.SaveResource, (data) => this.handleSaveResource(data));
-        this.subscribeToEvent(EditorEvents.SaveAllResources, (data) => this.handleSaveAllResources(data));
-        this.subscribeToEvent(EditorEvents.EditorResourceClose, (ev: EditorEvents.EditorCloseResourceEvent) => this.handleCloseResource(ev));
-        this.subscribeToEvent(EditorEvents.RenameResourceNotification, (ev: EditorEvents.RenameResourceEvent) => this.handleRenameResource(ev));
-        this.subscribeToEvent(EditorEvents.DeleteResourceNotification, (data) => this.handleDeleteResource(data));
+        this.subscribeToEvent(Editor.ProjectUnloadedNotificationEvent((data) => this.handleProjectUnloaded(data)));
+        this.subscribeToEvent(Editor.EditorEditResourceEvent((data) => this.handleEditResource(data)));
+        this.subscribeToEvent(Editor.EditorSaveResourceEvent((data) => this.handleSaveResource(data)));
+        this.subscribeToEvent(Editor.EditorSaveAllResourcesEvent((data) => this.handleSaveAllResources()));
+        this.subscribeToEvent(Editor.EditorResourceCloseEvent((ev: Editor.EditorResourceCloseEvent) => this.handleCloseResource(ev)));
+        this.subscribeToEvent(Editor.EditorRenameResourceNotificationEvent((ev: Editor.EditorRenameResourceNotificationEvent) => this.handleRenameResource(ev)));
+        this.subscribeToEvent(Editor.EditorDeleteResourceNotificationEvent((data) => this.handleDeleteResource(data)));
 
-        this.subscribeToEvent(UIEvents.ResourceEditorChanged, (data) => this.handleResourceEditorChanged(data));
+        this.subscribeToEvent(Editor.EditorResourceEditorChangedEvent((data) => this.handleResourceEditorChanged(data)));
 
-        this.subscribeToEvent("WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 

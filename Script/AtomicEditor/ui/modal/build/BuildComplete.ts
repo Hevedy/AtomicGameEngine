@@ -39,16 +39,16 @@ class BuildComplete extends Atomic.UIWindow {
         var reveal = <Atomic.UIButton>this.getWidget("reveal");
 
         if (!ev.success)
-            reveal.setState(Atomic.UI_WIDGET_STATE_DISABLED, true);
+            reveal.setState(Atomic.UI_WIDGET_STATE.UI_WIDGET_STATE_DISABLED, true);
 
 
-        this.subscribeToEvent(this, "WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(this, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent): boolean {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             if (ev.target.id == "reveal") {
 

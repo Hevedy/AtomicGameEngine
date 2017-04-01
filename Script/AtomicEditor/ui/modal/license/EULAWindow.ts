@@ -20,7 +20,6 @@
 // THE SOFTWARE.
 //
 
-import EditorEvents = require("editor/EditorEvents");
 import EditorUI = require("ui/EditorUI");
 import ModalWindow = require("../ModalWindow");
 
@@ -30,7 +29,7 @@ class EULAWindow extends ModalWindow {
 
         super();
 
-        this.settings = Atomic.UI_WINDOW_SETTINGS_DEFAULT & ~Atomic.UI_WINDOW_SETTINGS_CLOSE_BUTTON;
+        this.settings = Atomic.UI_WINDOW_SETTINGS.UI_WINDOW_SETTINGS_DEFAULT & ~Atomic.UI_WINDOW_SETTINGS.UI_WINDOW_SETTINGS_CLOSE_BUTTON;
 
         this.init("License Agreement", "AtomicEditor/editor/ui/eulaagreement.tb.txt");
 
@@ -57,13 +56,13 @@ class EULAWindow extends ModalWindow {
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent) {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             var id = ev.target.id;
 
             if (id == "quit") {
 
-                this.sendEvent("ExitRequested");
+                this.sendEvent(Atomic.ExitRequestedEventType);
                 return true;
 
             } else if (id == "ok") {
@@ -77,6 +76,8 @@ class EULAWindow extends ModalWindow {
 
                 var licenseSystem = ToolCore.getLicenseSystem();
                 licenseSystem.licenseAgreementConfirmed();
+
+                this.sendEvent(ToolCore.LicenseEulaAcceptedEventType);
 
                 return true;
             }

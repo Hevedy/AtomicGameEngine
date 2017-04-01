@@ -42,11 +42,14 @@
 namespace ToolCore
 {
 
-AssetDatabase::AssetDatabase(Context* context) : Object(context)
+AssetDatabase::AssetDatabase(Context* context) : Object(context),
+    assetScanDepth_(0),
+    assetScanImport_(false),
+    cacheEnabled_(true)
 {
-    SubscribeToEvent(E_LOADFAILED, HANDLER(AssetDatabase, HandleResourceLoadFailed));
-    SubscribeToEvent(E_PROJECTLOADED, HANDLER(AssetDatabase, HandleProjectLoaded));
-    SubscribeToEvent(E_PROJECTUNLOADED, HANDLER(AssetDatabase, HandleProjectUnloaded));
+    SubscribeToEvent(E_LOADFAILED, ATOMIC_HANDLER(AssetDatabase, HandleResourceLoadFailed));
+    SubscribeToEvent(E_PROJECTLOADED, ATOMIC_HANDLER(AssetDatabase, HandleProjectLoaded));
+    SubscribeToEvent(E_PROJECTUNLOADED, ATOMIC_HANDLER(AssetDatabase, HandleProjectUnloaded));
 }
 
 AssetDatabase::~AssetDatabase()
@@ -186,7 +189,7 @@ void AssetDatabase::PruneOrphanedDotAssetFiles()
 
     if (project_.Null())
     {
-        LOGDEBUG("AssetDatabase::PruneOrphanedDotAssetFiles - called without project loaded");
+        ATOMIC_LOGDEBUG("AssetDatabase::PruneOrphanedDotAssetFiles - called without project loaded");
         return;
     }
 
@@ -207,7 +210,7 @@ void AssetDatabase::PruneOrphanedDotAssetFiles()
         if (!fs->FileExists(assetFilename) && !fs->DirExists(assetFilename))
         {
 
-            LOGINFOF("Removing orphaned asset file: %s", dotAssetFilename.CString());
+            ATOMIC_LOGINFOF("Removing orphaned asset file: %s", dotAssetFilename.CString());
             fs->Delete(dotAssetFilename);
         }
 
@@ -229,7 +232,7 @@ String AssetDatabase::GetDotAssetFilename(const String& path)
 
 }
 
-void AssetDatabase::AddAsset(SharedPtr<Asset>& asset)
+void AssetDatabase::AddAsset(SharedPtr<Asset>& asset, bool newAsset)
 {
 
     assert(asset->GetGUID().Length());
@@ -242,6 +245,13 @@ void AssetDatabase::AddAsset(SharedPtr<Asset>& asset)
     asset->UpdateFileTimestamp();
 
     VariantMap eventData;
+
+    if (newAsset)
+    {        
+        eventData[AssetNew::P_GUID] = asset->GetGUID();
+        SendEvent(E_ASSETNEW, eventData);
+    }
+
     eventData[ResourceAdded::P_GUID] = asset->GetGUID();
     SendEvent(E_RESOURCEADDED, eventData);
 }
@@ -290,6 +300,7 @@ bool AssetDatabase::ImportDirtyAssets()
 
     for (unsigned i = 0; i < assets.Size(); i++)
     {
+        assetScanImport_ = true;
         assets[i]->Import();
         assets[i]->Save();
         assets[i]->dirty_ = false;
@@ -313,9 +324,71 @@ void AssetDatabase::PreloadAssets()
 
 }
 
+void AssetDatabase::UpdateAssetCacheMap()
+{
+    FileSystem* fileSystem = GetSubsystem<FileSystem>();
+
+    if (project_.Null())
+        return;
+
+    bool gen = assetScanImport_;
+    assetScanImport_ = false;
+
+    String cachepath = project_->GetProjectPath() + "Cache/__atomic_ResourceCacheMap.json";
+
+    if (!gen && !fileSystem->FileExists(cachepath))
+        gen = true;
+
+    if (!gen)
+        return;
+
+    List<SharedPtr<Asset>>::ConstIterator itr = assets_.Begin();
+
+    HashMap<String, String> assetMap;
+    JSONValue jAssetMap;
+
+    while (itr != assets_.End())
+    {
+        assetMap.Clear();
+        (*itr)->GetAssetCacheMap(assetMap);
+
+        HashMap<String, String>::ConstIterator amitr = assetMap.Begin();
+
+        while (amitr != assetMap.End())
+        {
+            jAssetMap.Set(amitr->first_, amitr->second_);
+            amitr++;
+        }
+
+        itr++;
+    }
+
+    SharedPtr<File> file(new File(context_, cachepath, FILE_WRITE));
+    if (!file->IsOpen())
+    {
+        ATOMIC_LOGERRORF("Unable to update ResourceCacheMap: %s", cachepath.CString());
+        return;
+    }
+
+
+    SharedPtr<JSONFile> jsonFile(new JSONFile(context_));
+    jsonFile->GetRoot().Set("assetMap", jAssetMap);
+
+    jsonFile->Save(*file);
+
+
+}
 
 void AssetDatabase::Scan()
 {
+    if (!assetScanDepth_)
+    {
+        assert(!assetScanImport_);
+        SendEvent(E_ASSETSCANBEGIN);
+    }
+
+    assetScanDepth_++;
+
     PruneOrphanedDotAssetFiles();
 
     FileSystem* fs = GetSubsystem<FileSystem>();
@@ -358,7 +431,9 @@ void AssetDatabase::Scan()
             SharedPtr<Asset> asset(new Asset(context_));
 
             if (asset->SetPath(path))
-                AddAsset(asset);
+            {
+                AddAsset(asset, true);
+            }
         }
         else
         {
@@ -367,7 +442,7 @@ void AssetDatabase::Scan()
             json->Load(*file);
             file->Close();
 
-            JSONValue root = json->GetRoot();
+            JSONValue& root = json->GetRoot();
 
             assert(root.Get("version").GetInt() == ASSET_VERSION);
 
@@ -389,6 +464,13 @@ void AssetDatabase::Scan()
     if (ImportDirtyAssets())
         Scan();
 
+    assetScanDepth_--;
+
+    if (!assetScanDepth_)
+    {
+        UpdateAssetCacheMap();
+        SendEvent(E_ASSETSCANEND);        
+    }
 }
 
 void AssetDatabase::GetFolderAssets(String folder, PODVector<Asset*>& assets) const
@@ -455,17 +537,12 @@ void AssetDatabase::HandleProjectLoaded(StringHash eventType, VariantMap& eventD
 
     ReadImportConfig();
 
-    FileSystem* fs = GetSubsystem<FileSystem>();
+    if (cacheEnabled_)
+    {
+        InitCache();
+    }
 
-    if (!fs->DirExists(GetCachePath()))
-        fs->CreateDir(GetCachePath());
-
-    ResourceCache* cache = GetSubsystem<ResourceCache>();
-    cache->AddResourceDir(GetCachePath());
-
-    Scan();
-
-    SubscribeToEvent(E_FILECHANGED, HANDLER(AssetDatabase, HandleFileChanged));
+    SubscribeToEvent(E_FILECHANGED, ATOMIC_HANDLER(AssetDatabase, HandleFileChanged));
 }
 
 void AssetDatabase::HandleProjectUnloaded(StringHash eventType, VariantMap& eventData)
@@ -512,7 +589,6 @@ void AssetDatabase::HandleResourceLoadFailed(StringHash eventType, VariantMap& e
     evData[AssetImportError::P_GUID] = asset->guid_;
     evData[AssetImportError::P_ERROR] = ToString("Asset %s Failed to Load", asset->path_.CString());
     SendEvent(E_ASSETIMPORTERROR, evData);
-
 
 }
 
@@ -579,10 +655,8 @@ String AssetDatabase::GetResourceImporterName(const String& resourceTypeName)
 
         resourceTypeToImporterType_["Animation"] = "ModelImporter";
 
-
-#ifdef ATOMIC_DOTNET
         resourceTypeToImporterType_["CSComponentAssembly"] = "NETAssemblyImporter";
-#endif
+        resourceTypeToImporterType_["TmxFile2D"] = "TMXImporter";
 
     }
 
@@ -624,5 +698,74 @@ void AssetDatabase::ReimportAllAssetsInDirectory(const String& directoryPath)
 
 }
 
+
+bool AssetDatabase::InitCache()
+{
+    FileSystem* fs = GetSubsystem<FileSystem>();
+
+    if (!fs->DirExists(GetCachePath()))
+        fs->CreateDir(GetCachePath());
+
+    ResourceCache* cache = GetSubsystem<ResourceCache>();
+    cache->AddResourceDir(GetCachePath());
+
+    Scan();
+
+    return true;
+}
+
+bool AssetDatabase::CleanCache()
+{
+    FileSystem* fileSystem = GetSubsystem<FileSystem>();
+
+    String cachePath = GetCachePath();
+
+    if (fileSystem->DirExists(cachePath))
+    {
+        ATOMIC_LOGINFOF("Cleaning cache directory %s", cachePath.CString());
+
+        fileSystem->RemoveDir(cachePath, true);
+
+        if (fileSystem->DirExists(cachePath))
+        {
+            ATOMIC_LOGERRORF("Unable to remove cache directory %s", cachePath.CString());
+            return false;
+        }
+    }
+
+    fileSystem->CreateDir(cachePath);
+
+    if (!fileSystem->DirExists(cachePath))
+    {
+        ATOMIC_LOGERRORF("Unable to create cache directory %s", cachePath.CString());
+        return false;
+    }
+
+    return true;
+
+}
+
+bool AssetDatabase::GenerateCache(bool clean)
+{
+    ATOMIC_LOGINFO("Generating cache... hold on");
+
+    if (clean)
+    {
+        if (!CleanCache())
+            return false;
+    }
+
+    ReimportAllAssets();
+
+    ATOMIC_LOGINFO("Cache generated");
+
+    return true;
+
+}
+
+void AssetDatabase::SetCacheEnabled(bool cacheEnabled)
+{
+    cacheEnabled_ = cacheEnabled;
+}
 
 }

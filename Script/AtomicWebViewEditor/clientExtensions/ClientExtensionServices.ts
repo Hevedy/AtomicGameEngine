@@ -35,19 +35,41 @@ interface EventSubscription {
 export class EventDispatcher implements Editor.Extensions.EventDispatcher {
     private subscriptions: EventSubscription[] = [];
 
-    sendEvent(eventType: string, data: any) {
+    sendEvent<T extends Atomic.EventCallbackMetaData>(eventCallbackMetaData:T)
+    sendEvent(eventType: string, data: any)
+    sendEvent(eventTypeOrWrapped: any, data?: any) {
+        let eventType: string;
+        let eventData: any;
+        if (typeof(eventTypeOrWrapped) == "string") {
+            eventType = eventTypeOrWrapped;
+            eventData = data;
+        } else {
+            const metaData = eventTypeOrWrapped as Atomic.EventCallbackMetaData;
+            eventType = metaData._eventType;
+            eventData = metaData._callbackData;
+        }
+
         this.subscriptions.forEach(sub => {
             if (sub.eventName == eventType) {
-                sub.callback(data);
+                sub.callback(eventData);
             }
         });
     }
 
-    subscribeToEvent(eventType, callback) {
-        this.subscriptions.push({
-            eventName: eventType,
-            callback: callback
-        });
+    subscribeToEvent(eventType: string, callback: (...params) => any);
+    subscribeToEvent(wrapped: Atomic.EventMetaData);
+    subscribeToEvent(eventTypeOrWrapped: any, callback?: any) {
+        if (callback) {
+            this.subscriptions.push({
+                eventName: eventTypeOrWrapped,
+                callback: callback
+            });
+        } else {
+            this.subscriptions.push({
+                eventName: eventTypeOrWrapped._eventType,
+                callback: eventTypeOrWrapped._callback
+            });
+        }
     }
 }
 
@@ -76,15 +98,18 @@ class ServicesProvider<T extends Editor.Extensions.ServiceEventListener> impleme
 
 export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExtensions.WebViewServiceEventListener> {
 
-    private userPreferences = {};
+    private projectPreferences = {};
+    private applicationPreferences = {};
 
     /**
      * Sets the preferences for the service locator
-     * @param  {any} prefs
+     * @param  {any} projectPreferences
+     * @param  {any} applicationPreferences
      * @return {[type]}
      */
-    setPreferences(prefs : any) {
-        this.userPreferences = prefs;
+    setPreferences(projectPreferences?: any, applicationPreferences?: any) {
+        this.projectPreferences = projectPreferences || this.projectPreferences;
+        this.applicationPreferences = applicationPreferences || this.applicationPreferences;
     }
 
     /**
@@ -97,14 +122,15 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
         eventDispatcher.subscribeToEvent(ClientExtensionEventNames.ResourceRenamedEvent, (ev) => this.renameResource(ev));
         eventDispatcher.subscribeToEvent(ClientExtensionEventNames.ResourceDeletedEvent, (ev) => this.deleteResource(ev));
         eventDispatcher.subscribeToEvent(ClientExtensionEventNames.CodeSavedEvent, (ev) => this.saveCode(ev));
-        eventDispatcher.subscribeToEvent(ClientExtensionEventNames.PreferencesChangedEvent, (ev) => this.preferencesChanged());
+        eventDispatcher.subscribeToEvent(ClientExtensionEventNames.PreferencesChangedEvent, (ev) => this.preferencesChanged(ev));
+        eventDispatcher.subscribeToEvent(ClientExtensionEventNames.FormatCodeEvent, (ev) => this.formatCode());
     }
 
     /**
      * Called when code is loaded
-     * @param  {Editor.EditorEvents.CodeLoadedEvent} ev Event info about the file that is being loaded
+     * @param  {Editor.ClientExtensions.CodeLoadedEvent} ev Event info about the file that is being loaded
      */
-    codeLoaded(ev: Editor.EditorEvents.CodeLoadedEvent) {
+    codeLoaded(ev: Editor.ClientExtensions.CodeLoadedEvent) {
         this.registeredServices.forEach((service) => {
             try {
                 // Notify services that the project has just been loaded
@@ -119,9 +145,9 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
 
     /**
      * Called after code has been saved
-     * @param  {Editor.EditorEvents.SaveResourceEvent} ev
+     * @param  {Editor.ClientExtensions.SaveResourceEvent} ev
      */
-    saveCode(ev: Editor.EditorEvents.CodeSavedEvent) {
+    saveCode(ev: Editor.ClientExtensions.CodeSavedEvent) {
         // run through and find any services that can handle this.
         this.registeredServices.forEach((service) => {
             try {
@@ -138,7 +164,7 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
     /**
      * Called when a resource has been deleted
      */
-    deleteResource(ev: Editor.EditorEvents.DeleteResourceEvent) {
+    deleteResource(ev: Editor.ClientExtensions.DeleteResourceEvent) {
         this.registeredServices.forEach((service) => {
             try {
                 // Verify that the service contains the appropriate methods and that it can delete
@@ -153,9 +179,9 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
 
     /**
      * Called when a resource has been renamed
-     * @param  {Editor.EditorEvents.RenameResourceEvent} ev
+     * @param  {Editor.ClientExtensions.RenameResourceEvent} ev
      */
-    renameResource(ev: Editor.EditorEvents.RenameResourceEvent) {
+    renameResource(ev: Editor.ClientExtensions.RenameResourceEvent) {
         this.registeredServices.forEach((service) => {
             try {
                 // Verify that the service contains the appropriate methods and that it can handle the rename
@@ -169,10 +195,26 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
     }
 
     /**
-     * Called when the editor is requesting to be configured for a particular file
-     * @param  {Editor.EditorEvents.EditorFileEvent} ev
+     * Called when the editor code should be formatted
      */
-    configureEditor(ev: Editor.EditorEvents.EditorFileEvent) {
+    formatCode() {
+        this.registeredServices.forEach((service) => {
+            try {
+                // Verify that the service contains the appropriate methods and that it can handle the rename
+                if (service.formatCode) {
+                    service.formatCode();
+                }
+            } catch (e) {
+                alert(`Error detected in extension ${service.name}\n \n ${e.stack}`);
+            }
+        });
+    }
+
+    /**
+     * Called when the editor is requesting to be configured for a particular file
+     * @param  {Editor.ClientExtensions.EditorFileEvent} ev
+     */
+    configureEditor(ev: Editor.ClientExtensions.EditorFileEvent) {
         this.registeredServices.forEach((service) => {
             try {
                 // Notify services that the project has just been loaded
@@ -189,12 +231,12 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
      * Called when preferences changes
      * @param  {Editor.EditorEvents.PreferencesChangedEvent} ev
      */
-    preferencesChanged() {
+    preferencesChanged(prefs: Editor.ClientExtensions.PreferencesChangedEventData) {
         this.registeredServices.forEach((service) => {
             // Notify services that the project has been unloaded
             try {
                 if (service.preferencesChanged) {
-                    service.preferencesChanged();
+                    service.preferencesChanged(prefs);
                 }
             } catch (e) {
                 alert(`Extension Error:\n Error detected in extension ${service.name}\n \n ${e.stack}`);
@@ -213,16 +255,19 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
 
     /**
      * Return a preference value or the provided default from the user settings file
-     * @param  {string} gorupName name of the group the preference lives under
+     * @param  {string} settignsGroup name of the group the preference lives under
      * @param  {string} preferenceName name of the preference to retrieve
      * @param  {number | boolean | string} defaultValue value to return if pref doesn't exist
      * @return {number|boolean|string}
      */
-    getUserPreference(groupName: string, preferenceName: string, defaultValue?: number | boolean | string): number | boolean | string {
-        if (this.userPreferences) {
-            let prefs = this.userPreferences[groupName];
+    getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: number): number;
+    getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: string): string;
+    getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: boolean): boolean;
+    getUserPreference(settingsGroup: string, preferenceName: string, defaultValue?: any): any {
+        if (this.projectPreferences) {
+            let prefs = this.projectPreferences[settingsGroup];
             if (prefs) {
-                return prefs[groupName][preferenceName] || defaultValue;
+                return prefs[preferenceName] || defaultValue;
             }
         }
 
@@ -230,5 +275,26 @@ export class WebViewServicesProvider extends ServicesProvider<Editor.ClientExten
         return defaultValue;
     }
 
+    /**
+     * Return a preference value or the provided default from the user settings file
+     * @param  {string} settignsGroup name of the group the preference lives under
+     * @param  {string} preferenceName name of the preference to retrieve
+     * @param  {number | boolean | string} defaultValue value to return if pref doesn't exist
+     * @return {number|boolean|string}
+     */
+    getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: number): number;
+    getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: string): string;
+    getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: boolean): boolean;
+    getApplicationPreference(settingsGroup: string, preferenceName: string, defaultValue?: any): any {
+        if (this.applicationPreferences) {
+            let prefs = this.applicationPreferences[settingsGroup];
+            if (prefs) {
+                return prefs[preferenceName] || defaultValue;
+            }
+        }
+
+        // if all else fails
+        return defaultValue;
+    }
 
 }

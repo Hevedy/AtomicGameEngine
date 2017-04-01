@@ -69,7 +69,7 @@ class About extends ModalWindow {
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent) {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             var id = ev.target.id;
 
@@ -85,45 +85,49 @@ class About extends ModalWindow {
 
         var text = "";
 
-        text += "<widget TBImageWidget: filename: 'AtomicEditor/editor/images/atomic_logo.png'>\n\n";
-        text += "<color #D4FB79>Version  0.1.p0</color>\n\n";
-        text += "(c) 2014-2015 THUNDERBEAST GAMES LLC\n\n\n";
+        var buildName = Atomic.AtomicBuildInfo.getBuildName();
+        var buildDate = Atomic.AtomicBuildInfo.getBuildDate();
+        var buildTime = Atomic.AtomicBuildInfo.getBuildTime();
+        var buildSHA = Atomic.AtomicBuildInfo.getGitSHA();
+        var buildVendor = Atomic.AtomicBuildInfo.getBuildVendor();
 
-        text += "<color #D4FB79>Installed platforms and modules:</color>\n\n";
+        var buildString = `<color #FFFFFF>'${buildName}' - ${buildDate} ${buildTime}\nGit: ${buildSHA}\nVendor: <color #76D6FF>${buildVendor}</color></color>`;
+
+        text += "<widget TBImageWidget: filename: 'AtomicEditor/editor/images/atomic_logo.png'>\n\n";
+        text += "(c) 2014-2016 THUNDERBEAST GAMES LLC\n\n";
+
+        text += "<color #76D6FF>Build Information:</color>\n";
+
+        text += buildString + "\n\n";
+
+        let contributors = ["JoshEngebretson", "shaddockh", "rsredsq", "JimMarlowe", "mattbenic",
+        "Type1J", "weinandvv", "JohnnyWahib", "raheelx", "CTrauma", "eugenegous", "christoffersch", "GarethNN",
+        "LaraEngebretson", "bitonator", "rokups", "honigbeutler123", "benwolf", "jonaspm",
+        "keithjohnston", "darrylryan", "Alan-FGR", "marynate", "Sleaker", "Tarik-B", "flyover", "buresu",
+        "rosshadden", "bparvanov" ];
+
+        contributors.sort();
+
+        text += `<color #76D6FF>Atomic Contributors:</color>\n<color #88FF88>${contributors.join(", ")}</color>\n\n`;
+
+        text += "<color #76D6FF>Installed platforms and modules:</color>\n\n";
 
         var licenseSystem = ToolCore.licenseSystem;
 
         var installedText = "    <widget TBSkinImage: skin: 'LogoMac-Small'> <widget TBSkinImage: skin: 'LogoWindows-Small'> <widget TBSkinImage: skin: 'LogoHTML5-Small'> ";
-        var availableText = "   ";
 
-        if (licenseSystem.licenseAndroid)
-            installedText += "<widget TBSkinImage: skin: 'LogoAndroid-Small'> ";
-        else
-            availableText += "<widget TBSkinImage: skin: 'LogoAndroid-Small'> ";
+        installedText += "<widget TBSkinImage: skin: 'LogoAndroid-Small'> ";
 
-            if (licenseSystem.licenseIOS)
-                installedText += "<widget TBSkinImage: skin: 'LogoIOS-Small'> ";
-            else
-                availableText += "<widget TBSkinImage: skin: 'LogoIOS-Small'> ";
+        installedText += "<widget TBSkinImage: skin: 'LogoIOS-Small'> ";
 
         installedText += "<widget TBSkinImage: skin: 'Module2D-Small'> ";
 
-        if (licenseSystem.licenseModule3D)
-            installedText += "<widget TBSkinImage: skin: 'Module3D-Small'> ";
-        else
-            availableText += "<widget TBSkinImage: skin: 'Module3D-Small'> ";
+        installedText += "<widget TBSkinImage: skin: 'Module3D-Small'> ";
 
         text += installedText + "\n\n\n";
 
-        if (!licenseSystem.licenseIOS || !licenseSystem.licenseAndroid || !licenseSystem.licenseModule3D) {
-          text += "<color #76D6FF>Available platforms and modules:</color>\n\n";
-          text += availableText + "\n\n\n";
-      }
-
-
-        text += "<color #76D6FF>Special Thanks:</color>\n\n";
-        text += "    The Urho3D Project - http://urho3d.github.io\n\n";
-        text += "    Sami Vaarala - http://www.duktape.org";
+        text += "<color #76D6FF>Special Thanks:</color>\n";
+        text += "The Urho3D Project (http://urho3d.github.io), Sami Vaarala (http://www.duktape.org)\n";
 
         return text;
 

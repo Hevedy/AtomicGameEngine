@@ -26,32 +26,45 @@ namespace ToolCore
 {
 
 
-EVENT(E_RESOURCEADDED, ResourceAdded)
+ATOMIC_EVENT(E_RESOURCEADDED, ResourceAdded)
 {
-    PARAM(P_GUID, GUID);                  // string
+    ATOMIC_PARAM(P_GUID, GUID);                  // string
 }
 
-EVENT(E_RESOURCEREMOVED, ResourceRemoved)
+ATOMIC_EVENT(E_RESOURCEREMOVED, ResourceRemoved)
 {
-    PARAM(P_GUID, GUID);                  // string
+    ATOMIC_PARAM(P_GUID, GUID);                  // string
 }
 
-EVENT(E_ASSETIMPORTERROR, AssetImportError)
+ATOMIC_EVENT(E_ASSETIMPORTERROR, AssetImportError)
 {
-    PARAM(P_PATH, Path);                  // string
-    PARAM(P_GUID, GUID);                  // string
-    PARAM(P_ERROR, Error);                  // string
+    ATOMIC_PARAM(P_PATH, Path);                  // string
+    ATOMIC_PARAM(P_GUID, GUID);                  // string
+    ATOMIC_PARAM(P_ERROR, Error);                  // string
 }
 
-EVENT(E_ASSETRENAMED, AssetRenamed)
+ATOMIC_EVENT(E_ASSETSCANBEGIN, AssetScanBegin)
 {
-    PARAM(P_ASSET, Asset);                  // asset ptr
 }
 
-EVENT(E_ASSETMOVED, AssetMoved)
+ATOMIC_EVENT(E_ASSETSCANEND, AssetScanEnd)
 {
-    PARAM(P_ASSET, Asset);                  // asset ptr
-    PARAM(P_OLDPATH, OldPath);                  // string
+}
+
+ATOMIC_EVENT(E_ASSETNEW, AssetNew)
+{
+    ATOMIC_PARAM(P_GUID, GUID);                  // string
+}
+
+ATOMIC_EVENT(E_ASSETRENAMED, AssetRenamed)
+{
+    ATOMIC_PARAM(P_ASSET, Asset);                  // asset ptr
+}
+
+ATOMIC_EVENT(E_ASSETMOVED, AssetMoved)
+{
+    ATOMIC_PARAM(P_ASSET, Asset);                  // asset ptr
+    ATOMIC_PARAM(P_OLDPATH, OldPath);                  // string
 
 }
 

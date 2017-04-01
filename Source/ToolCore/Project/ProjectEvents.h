@@ -29,18 +29,27 @@ using namespace Atomic;
 namespace ToolCore
 {
 
-EVENT(E_PROJECTLOADED, ProjectLoaded)
+ATOMIC_EVENT(E_PROJECTBEGINLOAD, ProjectBeginLoad)
 {
-    PARAM(P_PROJECTPATH, ProjectPath);    // string
+    ATOMIC_PARAM(P_PROJECTPATH, ProjectPath);   // string
+    ATOMIC_PARAM(P_PROJECT, Project);           // Project *
 }
 
-EVENT(E_PROJECTUNLOADED, ProjectUnloaded)
+// Event is triggered once a project has been loaded and after prefs have been loaded
+ATOMIC_EVENT(E_PROJECTLOADED, ProjectLoaded)
+{
+    ATOMIC_PARAM(P_PROJECTPATH, ProjectPath);   // string (The path to the project that was loaded)
+    ATOMIC_PARAM(P_PROJECT, Project);           // Project * (The reference to the project)
+    ATOMIC_PARAM(P_RESULT, Result);             // bool (whether the project loaded successfully)
+}
+
+ATOMIC_EVENT(E_PROJECTUNLOADED, ProjectUnloaded)
 {
 }
 
-EVENT(E_PROJECTUSERPREFSAVED, ProjectUserPrefSaved)
+ATOMIC_EVENT(E_PROJECTUSERPREFSAVED, ProjectUserPrefSaved)
 {
-    PARAM(P_PREFS, Prefs);    // ProjectUserPrefs
+    ATOMIC_PARAM(P_PREFS, Prefs);    // ProjectUserPrefs
 }
 
 

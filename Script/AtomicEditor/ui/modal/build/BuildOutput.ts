@@ -39,25 +39,25 @@ class BuildOutput extends ModalWindow {
         this.resizeToFitContent();
         this.center();
 
-        this.subscribeToEvent(buildBase, "BuildOutput", (ev: ToolCore.BuildOutputEvent) => {
+        this.subscribeToEvent(buildBase, ToolCore.BuildOutputEvent((ev: ToolCore.BuildOutputEvent) => {
 
             this.textOutput += ev.text;
             this.outputField.text = this.textOutput;
             this.outputField.scrollTo(0, 0xffffff);
 
-        });
+        }));
 
-        this.subscribeToEvent("BuildComplete", (ev: ToolCore.BuildCompleteEvent) => {
+        this.subscribeToEvent(ToolCore.BuildCompleteEvent((ev: ToolCore.BuildCompleteEvent) => {
 
             new BuildComplete(this, ev);
 
-        });
+        }));
 
     }
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent): boolean {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             if (ev.target.id == "cancel") {
                 this.hide();

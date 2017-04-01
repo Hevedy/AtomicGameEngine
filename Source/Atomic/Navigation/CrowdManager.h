@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +40,7 @@ namespace Atomic
 class CrowdAgent;
 class NavigationMesh;
 
-/// Parameter structure for obstacle avoidance params (copied from DetourObstacleAvoidance.h in order to hide Detour header from Atomic library users).
+/// Parameter structure for obstacle avoidance params (copied from DetourObstacleAvoidance.h in order to hide Detour header from Urho3D library users).
 struct CrowdObstacleAvoidanceParams
 {
     float velBias;
@@ -58,7 +58,7 @@ struct CrowdObstacleAvoidanceParams
 /// Crowd manager scene component. Should be added only to the root scene node.
 class ATOMIC_API CrowdManager : public Component
 {
-    OBJECT(CrowdManager);
+    ATOMIC_OBJECT(CrowdManager, Component);
 
     friend class CrowdAgent;
 
@@ -176,11 +176,13 @@ private:
     void HandleSceneSubsystemUpdate(StringHash eventType, VariantMap& eventData);
     /// Handle navigation mesh changed event. It can be navmesh being rebuilt or being removed from its node.
     void HandleNavMeshChanged(StringHash eventType, VariantMap& eventData);
+    /// Handle component added in the scene to check for late addition of the navmesh.
+    void HandleComponentAdded(StringHash eventType, VariantMap& eventData);
 
     /// Internal Detour crowd object.
     dtCrowd* crowd_;
     /// NavigationMesh for which the crowd was created.
-    NavigationMesh* navigationMesh_;
+    WeakPtr<NavigationMesh> navigationMesh_;
     /// The NavigationMesh component Id for pending crowd creation.
     unsigned navigationMeshId_;
     /// The maximum number of agents the crowd can manage.

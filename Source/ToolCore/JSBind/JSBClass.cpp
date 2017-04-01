@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 //
 
+#include <Atomic/Math/Plane.h>
 #include <Atomic/Core/ProcessUtils.h>
 #include <Atomic/IO/Log.h>
 #include <Atomic/IO/File.h>
@@ -58,13 +59,14 @@ void JSBFunctionSignature::Parse()
 
 }
 
+
 bool JSBFunctionSignature::Match(JSBFunction* function)
 {
 
     if (name_ != function->GetName())
         return false;
 
-    Vector<JSBFunctionType*>& parameters = function->GetParameters();
+    const Vector<JSBFunctionType*>& parameters = function->GetParameters();
 
     if (types_.Size() != parameters.Size())
         return false;
@@ -123,9 +125,9 @@ bool JSBFunctionSignature::Match(JSBFunction* function)
 
 }
 
-JSBClass::JSBClass(Context* context, JSBModule *module, const String& name, const String& nativeName) : Object(context),
+JSBClass::JSBClass(Context* context, JSBModule *module, const String& name, const String& nativeName, bool interface) : Object(context),
     module_(module), name_(name), nativeName_(nativeName),
-    isAbstract_(false), isObject_(false),
+    isAbstract_(false), isObject_(false), isGeneric_(false), isInterface_(interface),
     numberArrayElements_(0), arrayElementType_("float"),
     hasProperties_(false)
 {
@@ -159,6 +161,13 @@ JSBClass::JSBClass(Context* context, JSBModule *module, const String& name, cons
         numberArrayElements_ = 2;
         arrayElementType_ = "int";
     }
+    else if (name_ == "Frustum")
+    {
+        // NUM_FRUSTUM_PLANES = 6;
+        numberArrayElements_ = (int) ((sizeof(Plane) * 6) / sizeof(float));
+        // NUM_FRUSTUM_VERTICES = 8;
+        numberArrayElements_ += (int) ((sizeof(Vector3) * 8) / sizeof(float));
+    }
 
 }
 
@@ -181,11 +190,20 @@ JSBClass* JSBClass::GetBaseClass()
 
 }
 
-JSBFunction* JSBClass::GetConstructor()
+void JSBClass::GetAllFunctions(PODVector<JSBFunction*>& functions)
+{
+    if (baseClasses_.Size())
+        baseClasses_[0]->GetAllFunctions(functions);
+
+    functions += functions_;
+
+}
+
+JSBFunction* JSBClass::GetConstructor(BindingLanguage bindingLanguage)
 {
     {
         for (unsigned i = 0; i < functions_.Size(); i++)
-            if (functions_[i]->IsConstructor() && !functions_[i]->Skip())
+            if (functions_[i]->IsConstructor() && !functions_[i]->Skip(bindingLanguage))
                 return functions_[i];
     }
 
@@ -265,8 +283,42 @@ void JSBClass::RecursiveAddBaseClass(PODVector<JSBClass*>& baseClasses)
     }
 }
 
+void JSBClass::MergeInterface(JSBClass* interface)
+{
+    if (!interface->IsInterface())
+    {
+        ATOMIC_LOGERRORF("JSBClass::MergeInterface - attempting to merge non-interface class %s", interface->GetName().CString());
+        return;
+    }
+
+    // We merge interfaces via cloning the method for those which aren't implemented in the class itself
+    // We don't use a common native wrapper, as we need to cast (sometimes using multiple inheritance, and this avoids an error prone dynamic cast)
+
+    for (unsigned i = 0; i < interface->functions_.Size(); i++)
+    {
+        JSBFunction* src = interface->functions_[i];
+
+        if (src->Skip() || src->IsConstructor() || src->IsDestructor())
+            continue;
+
+        if (!MatchFunction(src))
+        {
+            JSBFunction* function = src->Clone(this);
+            function->SetInterface(true);
+            AddFunction(function);
+        }
+    }
+}
+
 void JSBClass::Preprocess()
 {
+
+    // merge interfaces
+    for (unsigned i = 0; i < interfaces_.Size(); i++)
+    {
+        MergeInterface(interfaces_[i]);
+    }
+
     RecursiveAddBaseClass(baseClasses_);
 }
 
@@ -290,9 +342,26 @@ void JSBClass::Process()
 
         for (unsigned k = 0; k < excludes_.Size(); k++)
         {
-            if (excludes_[k]->Match(functions_[j]))
+            JSBFunctionSignature* sig = excludes_[k];
+
+            if (sig->Match(functions_[j]))
             {
-                functions_[j]->SetSkip(true);
+                if (!sig->associatedBindings_.Size())
+                {
+                    functions_[j]->SetSkip(true);
+                }
+                else
+                {
+                    for (unsigned x = 0; x < sig->associatedBindings_.Size(); x++)
+                    {
+                        // This shouldn't happen
+                        if (sig->associatedBindings_[x] == BINDINGLANGUAGE_ANY)
+                            continue;
+
+                        functions_[j]->SetSkipLanguage(sig->associatedBindings_[x]);
+                    }
+                }
+
                 break;
             }
 
@@ -313,7 +382,7 @@ void JSBClass::Process()
         // skip function if only one parameter of type Context, if not Constuctor
         if (!function->IsConstructor())
         {
-            Vector<JSBFunctionType*>& parameters = function->GetParameters();
+            const Vector<JSBFunctionType*>& parameters = function->GetParameters();
 
             if (parameters.Size() == 1 && parameters.At(0)->type_->asClassType())
             {
@@ -340,9 +409,9 @@ void JSBClass::Process()
             {
                 function->SetOverload();
                 function2->SetOverload();
-                // initially set all overridden functions to skip
-                function->SetSkip(true);
-                function2->SetSkip(true);
+                // initially set all overridden functions to skip (for JavaScript)
+                function->SetSkipLanguage(BINDINGLANGUAGE_JAVASCRIPT);
+                function2->SetSkipLanguage(BINDINGLANGUAGE_JAVASCRIPT);
                 break;
             }
         }
@@ -363,7 +432,7 @@ void JSBClass::Process()
                 if (!override->Match(function))
                     continue;
 
-                function->SetSkip(false);
+                function->SetSkipLanguage(BINDINGLANGUAGE_JAVASCRIPT, false);
 
                 break;
 
@@ -433,22 +502,22 @@ void JSBClass::Dump()
 {
     if (name_ != nativeName_)
     {
-        LOGINFOF("Class: %s (%s)", name_.CString(), nativeName_.CString());
+        ATOMIC_LOGINFOF("Class: %s (%s)", name_.CString(), nativeName_.CString());
     }
     else
     {
-        LOGINFOF("Class: %s", name_.CString());
+        ATOMIC_LOGINFOF("Class: %s", name_.CString());
     }
 
-    LOGINFOF("   IsObject: %s", IsObject() ? "true" : "false");
+    ATOMIC_LOGINFOF("   IsObject: %s", IsObject() ? "true" : "false");
 
     if (baseClasses_.Size())
     {
-        LOGINFOF("   Bases:");
+        ATOMIC_LOGINFOF("   Bases:");
         for (unsigned i = 0; i < baseClasses_.Size(); i++)
         {
 
-            LOGINFOF("      %s", baseClasses_.At(i)->GetName().CString());
+            ATOMIC_LOGINFOF("      %s", baseClasses_.At(i)->GetName().CString());
         }
     }
 

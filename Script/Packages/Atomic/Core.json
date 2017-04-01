@@ -1,13 +1,21 @@
 {
 	"name" : "Core",
-	"sources" : ["Source/Atomic/Core"],
-	"classes" : ["Context", "Object"],
+	"sources" : ["Source/Atomic/Core", "Source/Atomic/BuildInfo"],
+	"classes" : ["Context", "Object", "AtomicBuildInfo", "Time"],
 	"classes_rename" : {
 		"Object" : "AObject"
 	},
 	"excludes" : {
 		"Object" : {
 			"SendEvent" : ["StringHash"]
+		},
+		"Context" : {
+			"GetTypeName" : ["StringHash"]
+		},
+		"CSharp" : {
+			"Object" : {
+				"UnsubscribeFromAllEvents" : []
+			}
 		}
 	},
 	"overloads" : {
@@ -19,8 +27,11 @@
 
 		"Object" : [
 			"sendEvent(eventType:string, data?:Object);",
+			"sendEvent<T extends Atomic.EventCallbackMetaData>(eventCallbackMetaData:T);",
 			"subscribeToEvent(eventType:string, callback:(data:any) => void);",
-			"subscribeToEvent(sender:AObject, eventType:string, callback:(data: any) => void);"
+			"subscribeToEvent(sender:AObject, eventType:string, callback:(data: any) => void);",
+			"subscribeToEvent(eventMetaData:Atomic.EventMetaData);",
+			"subscribeToEvent(sender:AObject, eventMetaData:Atomic.EventMetaData);"
 		]
 	},
 	"haxe_decl" : {

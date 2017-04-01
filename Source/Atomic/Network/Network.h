@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -46,7 +46,7 @@ template <class T> unsigned MakeHash(kNet::MessageConnection* value)
 /// %Network subsystem. Manages client-server communications using the UDP protocol.
 class ATOMIC_API Network : public Object, public kNet::IMessageHandler, public kNet::INetworkServerListener
 {
-    OBJECT(Network);
+    ATOMIC_OBJECT(Network, Object);
 
 public:
     /// Construct.
@@ -134,6 +134,19 @@ public:
     /// Send outgoing messages after frame logic. Called by HandleRenderUpdate.
     void PostUpdate(float timeStep);
 
+    // ATOMIC BEGIN
+
+    friend class MasterServerClient;
+
+    unsigned short GetServerPort() const { return serverPort_; }
+
+    bool IsEndPointConnected(const kNet::EndPoint& endPoint) const;
+
+    /// Connect to a server, reusing an existing Socket
+    bool ConnectWithExistingSocket(kNet::Socket* existingSocket, Scene* scene);
+
+    // ATOMIC END
+
 private:
     /// Handle begin frame event.
     void HandleBeginFrame(StringHash eventType, VariantMap& eventData);
@@ -170,6 +183,16 @@ private:
     float updateAcc_;
     /// Package cache directory.
     String packageCacheDir_;
+
+    // ATOMIC BEGIN
+    
+    void HandleClientConnected(StringHash eventType, VariantMap& eventData);
+
+    kNet::Network* GetKnetNetwork() { return network_; }
+
+    unsigned short serverPort_;
+    // ATOMIC END
+
 };
 
 /// Register Network library objects.

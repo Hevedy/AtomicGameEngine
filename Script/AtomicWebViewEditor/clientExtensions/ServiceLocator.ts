@@ -53,9 +53,15 @@ export class ClientServiceLocatorType implements Editor.ClientExtensions.ClientS
      * @param  {string} eventType
      * @param  {any} data
      */
-    sendEvent(eventType: string, data: any) {
+    sendEvent<T extends Atomic.EventCallbackMetaData>(eventCallbackMetaData:T)
+    sendEvent(eventType: string, data: any)
+    sendEvent(eventTypeOrWrapped: any, data?: any) {
         if (this.eventDispatcher) {
-            this.eventDispatcher.sendEvent(eventType, data);
+            if (data) {
+                this.eventDispatcher.sendEvent(eventTypeOrWrapped, data);
+            } else {
+                this.eventDispatcher.sendEvent(eventTypeOrWrapped);
+            }
         }
     }
 
@@ -64,9 +70,15 @@ export class ClientServiceLocatorType implements Editor.ClientExtensions.ClientS
      * @param  {string} eventType
      * @param  {any} callback
      */
-    subscribeToEvent(eventType: string, callback: (data: any) => void) {
+    subscribeToEvent(eventType: string, callback: (...params) => any);
+    subscribeToEvent(wrapped: Atomic.EventMetaData);
+    subscribeToEvent(eventTypeOrWrapped: any, callback?: any) {
         if (this.eventDispatcher) {
-            this.eventDispatcher.subscribeToEvent(eventType, callback);
+            if (callback) {
+                this.eventDispatcher.subscribeToEvent(eventTypeOrWrapped, callback);
+            } else {
+                this.eventDispatcher.subscribeToEvent(eventTypeOrWrapped);
+            }
         }
     }
 

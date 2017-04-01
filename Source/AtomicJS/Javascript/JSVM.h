@@ -40,13 +40,21 @@ namespace Atomic
 class JSFile;
 class JSUI;
 class JSMetrics;
+class JSVM;
+
+
+/// Registration signature for JSVM package registration
+typedef void(*JSVMPackageRegistrationFunction)(JSVM* vm);
+
+/// Registration signature for JSVM package registration with settings
+typedef void(*JSVMPackageRegistrationSettingsFunction)(JSVM* vm, const VariantMap& setting);
 
 class ATOMIC_API JSVM : public Object
 {
 
     friend class JSMetrics;
 
-    OBJECT(JSVM);
+    ATOMIC_OBJECT(JSVM, Object)
 
 public:
     /// Construct.
@@ -55,6 +63,13 @@ public:
     virtual ~JSVM();
 
     void InitJSContext();
+
+    /// Package registration
+    static void RegisterPackage(JSVMPackageRegistrationFunction regFunction);
+    static void RegisterPackage(JSVMPackageRegistrationSettingsFunction regFunction, const VariantMap& settings);
+
+    /// Initialize registered packages
+    void InitializePackages();
 
     bool ExecuteFile(File* file);
 
@@ -76,7 +91,7 @@ public:
     void GC();
     JSMetrics* GetMetrics() { return metrics_; }
 
-    void DumpJavascriptObjects() {}
+    void DumpJavascriptObjects();
 
 #ifdef JSVM_DEBUG
 
@@ -88,17 +103,19 @@ public:
     }
 #endif
 
+    // Returns if the given object is stashed
+    bool GetStashed(RefCounted* refcounted) const;
 
-    inline void AddObject(void* heapptr, RefCounted* object)
+    inline void AddObject(void* heapptr, RefCounted* object, InstantiationType instantiationType)
     {
         assert(!object->JSGetHeapPtr());
 
         object->JSSetHeapPtr(heapptr);
+        object->SetInstantiationType(instantiationType);
 
 #ifdef JSVM_DEBUG
         assert(heapToObject_.Find(heapptr) == heapToObject_.End());
 #endif
-
 
         heapToObject_[heapptr] = object;
 
@@ -107,6 +124,29 @@ public:
         if (itr != removedHeapPtr_.End())
             removedHeapPtr_.Erase(itr);
 #endif
+        
+        if (instantiationType != INSTANTIATION_JAVASCRIPT)
+        {
+            if (!object->Refs())
+            {
+                ATOMIC_LOGWARNING("JSVM::AddObject, native or C# instantiated object added with 0 refs");
+            }
+            else
+            {
+                // stash
+                Stash(object);
+            }
+        }
+        else
+        {
+            if (object->Refs() != 0)
+            {
+                // we already have a native reference, so need to stash
+                Stash(object);
+            }
+        }
+
+        object->AddRefSilent();
 
         if (object->IsObject())
         {
@@ -137,6 +177,8 @@ public:
 #endif
 
     }
+
+    void Stash(RefCounted* refCounted);
 
     inline RefCounted* GetObjectPtr(void* heapptr, bool allowNull = false)
     {
@@ -182,7 +224,42 @@ public:
 
     int GetRealLineNumber(const String& fileName, const int lineNumber);
 
+    unsigned GetStashCount() const { return stashCount_; }
+    unsigned GetTotalStashCount() const { return totalStashCount_;  }
+    unsigned GetTotalUnstashCount() const { return totalUnstashCount_; }
+
 private:
+
+    void Unstash(RefCounted* refCounted);
+
+    struct JSAPIPackageRegistration
+    {
+        JSAPIPackageRegistration()
+        {
+            registrationFunction = 0;
+            registrationSettingsFunction = 0;
+        }
+
+        JSAPIPackageRegistration(JSVMPackageRegistrationFunction regFunction)
+        {
+            registrationFunction = regFunction;
+            registrationSettingsFunction = 0;
+        }
+
+        JSAPIPackageRegistration(JSVMPackageRegistrationSettingsFunction regFunction, const VariantMap& regSettings)
+        {
+            registrationFunction = 0;
+            registrationSettingsFunction = regFunction;
+            settings = regSettings;
+        }
+
+
+        JSVMPackageRegistrationFunction registrationFunction;
+        JSVMPackageRegistrationSettingsFunction registrationSettingsFunction;
+        VariantMap settings;
+    };
+
+    static void OnRefCountChanged(RefCounted* refCounted, int refCount);
 
     void SubscribeToEvents();
     void HandleUpdate(StringHash eventType, VariantMap& eventData);
@@ -210,6 +287,12 @@ private:
     VariantMap objectRemovedData_;
 
     SharedPtr<JSMetrics> metrics_;
+
+    static Vector<JSAPIPackageRegistration*> packageRegistrations_;
+
+    unsigned stashCount_;
+    unsigned totalStashCount_;
+    unsigned totalUnstashCount_;
 
     static JSVM* instance_;
 
@@ -255,11 +338,11 @@ inline bool js_push_class_object_instance(duk_context* ctx, const RefCounted *in
     {
         if (instance->IsObject())
         {
-            LOGERRORF("Unable to push class object instance due to missing ClassID: %s", ((Object*)instance)->GetTypeName().CString());
+            ATOMIC_LOGERRORF("Unable to push class object instance due to missing ClassID: %s", ((Object*)instance)->GetTypeName().CString());
         }
         else
         {
-            LOGERROR("Unable to push RefCounted instance due to missing ClassID");
+            ATOMIC_LOGERROR("Unable to push RefCounted instance due to missing ClassID");
         }
 
         duk_set_top(ctx, top);

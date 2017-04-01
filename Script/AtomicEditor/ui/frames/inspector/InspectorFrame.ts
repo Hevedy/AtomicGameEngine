@@ -20,17 +20,16 @@
 // THE SOFTWARE.
 //
 
-import EditorEvents = require("editor/EditorEvents");
 import ScriptWidget = require("ui/ScriptWidget");
 
 // inspectors
 
 import MaterialInspector = require("./MaterialInspector");
 import ModelInspector = require("./ModelInspector");
-import AssemblyInspector = require("./AssemblyInspector");
 import PrefabInspector = require("./PrefabInspector");
 import TextureInspector = require("./TextureInspector");
-
+import AssemblyInspector = require("./AssemblyInspector");
+import ServiceLocator from "../../../hostExtensions/ServiceLocator";
 import SelectionInspector = require("./SelectionInspector");
 // make sure these are hooked in
 import "./SelectionEditTypes";
@@ -48,20 +47,20 @@ class InspectorFrame extends ScriptWidget {
 
         super();
 
-        this.gravity = Atomic.UI_GRAVITY_TOP_BOTTOM;
+        this.gravity = Atomic.UI_GRAVITY.UI_GRAVITY_TOP_BOTTOM;
 
         this.load("AtomicEditor/editor/ui/inspectorframe.tb.txt");
 
         var container = this.getWidget("inspectorcontainer");
 
-        this.subscribeToEvent(EditorEvents.EditResource, (data) => this.handleEditResource(data));
-        this.subscribeToEvent(EditorEvents.ProjectUnloadedNotification, (data) => this.handleProjectUnloaded(data));
+        this.subscribeToEvent(Editor.EditorEditResourceEvent((data) => this.handleEditResource(data)));
+        this.subscribeToEvent(Editor.ProjectUnloadedNotificationEvent((data) => this.handleProjectUnloaded(data)));
 
-        this.subscribeToEvent(EditorEvents.ActiveSceneEditorChange, (data) => this.handleActiveSceneEditorChanged(data));
+        this.subscribeToEvent(Editor.EditorActiveSceneEditorChangeEvent((data) => this.handleActiveSceneEditorChanged(data)));
 
     }
 
-    handleActiveSceneEditorChanged(event: EditorEvents.ActiveSceneEditorChangeEvent) {
+    handleActiveSceneEditorChanged(event: Editor.EditorActiveSceneEditorChangeEvent) {
 
         if (this.sceneEditor == event.sceneEditor) {
             return;
@@ -83,17 +82,19 @@ class InspectorFrame extends ScriptWidget {
 
         if (this.scene) {
 
-            this.subscribeToEvent(this.scene, "SceneNodeSelected", (event: Editor.SceneNodeSelectedEvent) => this.handleSceneNodeSelected(event));
+            this.subscribeToEvent(this.scene, Editor.SceneNodeSelectedEvent((event: Editor.SceneNodeSelectedEvent) => this.handleSceneNodeSelected(event)));
 
             // add the current selection
             var selection = this.sceneEditor.selection;
 
             for (var i = 0; i < selection.getSelectedNodeCount(); i++) {
 
-                this.handleSceneNodeSelected( { node: selection.getSelectedNode(i),  scene: this.scene, selected: true, quiet: true} );
+                this.handleSceneNodeSelected( <Editor.SceneNodeSelectedEvent> { node: selection.getSelectedNode(i),  scene: this.scene, selected: true, quiet: true} );
 
             }
 
+            // FIXME: Duktape is leaking selection object without nulling out
+            selection = null;
         }
 
     }
@@ -149,7 +150,7 @@ class InspectorFrame extends ScriptWidget {
     }
 
 
-    handleEditResource(ev: EditorEvents.EditResourceEvent) {
+    handleEditResource(ev: Editor.EditorEditResourceEvent) {
 
         var path = ev.path;
 
@@ -197,15 +198,6 @@ class InspectorFrame extends ScriptWidget {
             materialInspector.inspect(asset, material);
         }
 
-        if (asset.importerTypeName == "NETAssemblyImporter") {
-
-            var assemblyInspector = new AssemblyInspector();
-            container.addChild(assemblyInspector);
-
-            assemblyInspector.inspect(asset);
-
-        }
-
         if (asset.importerTypeName == "PrefabImporter") {
 
             var prefabInspector = new PrefabInspector();
@@ -230,8 +222,27 @@ class InspectorFrame extends ScriptWidget {
             textureInspector.inspect(texture, asset);
         }
 
+        if (asset.importerTypeName == "NETAssemblyImporter") {
+
+          var assemblyInspector = new AssemblyInspector();
+          container.addChild(assemblyInspector);
+          assemblyInspector.inspect(asset);
+
+        }
+
+        // Check if there are inspector plugins available for unknown asset types.
+        if (asset.importerType == null) {
+
+            ServiceLocator.uiServices.projectAssetClicked(asset);
+        }
     }
 
+    loadCustomInspectorWidget(rootWidget: Atomic.UIWidget) {
+
+        var container = this.getWidget("inspectorcontainer");
+        container.deleteAllChildren();
+        container.addChild(rootWidget);
+    }
 }
 
 export = InspectorFrame;

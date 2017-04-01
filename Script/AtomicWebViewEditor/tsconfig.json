@@ -7,12 +7,14 @@
         "removeComments": true,
         "noLib": false,
         "outDir": "../../Data/AtomicEditor/CodeEditor/source/editorCore",
-        "sourceMap": true
+        "sourceMap": true,
+        "forceConsistentCasingInFileNames": true
     },
     "filesGlob": [
         "./**/*.ts",
         "../TypeScript/*.ts",
-        "!../TypeScript/dist/*.ts"
+        "!../TypeScript/dist/*.ts",
+        "!../TypeScript/AtomicNET.d.ts"
     ],
     "atom": {
         "rewriteTsconfig": true
@@ -22,6 +24,7 @@
         "./clientExtensions/ClientExtensionServices.ts",
         "./clientExtensions/languageExtensions/javascript/JavascriptLanguageExtension.ts",
         "./clientExtensions/languageExtensions/turbobadger/TurboBadgerLanguageExtension.ts",
+        "./clientExtensions/languageExtensions/typescript/tsLanguageSupport.ts",
         "./clientExtensions/languageExtensions/typescript/TypescriptLanguageExtension.ts",
         "./clientExtensions/languageExtensions/typescript/workerprocess/TypescriptLanguageService.ts",
         "./clientExtensions/languageExtensions/typescript/workerprocess/TypescriptLanguageServiceWebWorker.ts",
@@ -32,12 +35,13 @@
         "./editor/editorCommands.ts",
         "./interop.ts",
         "./modules/typescript.d.ts",
-        "./typings/ace.d.ts",
+        "./typings/monaco.d.ts",
         "./typings/systemjs.d.ts",
         "./typings/webworkers.d.ts",
         "./typings/WindowExt.d.ts",
         "../TypeScript/Atomic.d.ts",
-        "../TypeScript/AtomicNET.d.ts",
+        "../TypeScript/AtomicApp.d.ts",
+        "../TypeScript/AtomicNETScript.d.ts",
         "../TypeScript/AtomicPlayer.d.ts",
         "../TypeScript/AtomicWork.d.ts",
         "../TypeScript/duktape.d.ts",

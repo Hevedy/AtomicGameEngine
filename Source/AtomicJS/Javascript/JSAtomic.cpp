@@ -30,6 +30,7 @@
 #include <Atomic/Engine/Engine.h>
 #include <Atomic/Audio/Audio.h>
 #include <Atomic/UI/UI.h>
+#include <Atomic/Metrics/Metrics.h>
 
 #ifdef ATOMIC_NETWORK
 #include <Atomic/Network/Network.h>
@@ -45,6 +46,7 @@
 #include "JSCore.h"
 #include "JSFileSystem.h"
 #include "JSGraphics.h"
+#include "JSAudio.h"
 #ifdef ATOMIC_3D
 #include "JSAtomic3D.h"
 #endif
@@ -108,7 +110,7 @@ static int js_print(duk_context* ctx)
     JSVM* vm = JSVM::GetJSVM(ctx);
     vm->SendEvent(E_JSPRINT, eventData);
 
-    LOGINFOF("%s", duk_to_string(ctx, -1));
+    ATOMIC_LOGINFOF("%s", duk_to_string(ctx, -1));
     return 0;
 }
 
@@ -215,6 +217,49 @@ static int js_atomic_script(duk_context* ctx)
     return 1;
 }
 
+
+static int js_atomic_ScriptEvent(duk_context* ctx)
+{
+    if (duk_get_top(ctx) != 2 || !duk_is_string(ctx, 0) || !duk_is_function(ctx, 1))
+    {
+        duk_push_string(ctx, "Atomic.ScriptEvent(eventType:string, callback:function); - passed invalid parameters");
+        duk_throw(ctx);
+        return 0;
+    }
+
+    String eventType = duk_get_string(ctx, 0);
+    duk_push_object(ctx);
+    duk_push_string(ctx, eventType.CString());
+    duk_put_prop_string(ctx, -2, "_eventType");
+    duk_dup(ctx, 1);
+    duk_put_prop_string(ctx, -2, "_callback");
+
+    return 1;
+}
+
+static int js_atomic_ScriptEventData(duk_context* ctx)
+{
+    if (duk_get_top(ctx) != 2 || !duk_is_string(ctx, 0))
+    {
+        duk_push_string(ctx, "Atomic.ScriptEventData(eventType:string, data?:Object); - passed invalid parameters");
+        duk_throw(ctx);
+        return 0;
+    }
+
+    String eventType = duk_get_string(ctx, 0);
+    duk_push_object(ctx);
+    duk_push_string(ctx, eventType.CString());
+    duk_put_prop_string(ctx, -2, "_eventType");
+
+    if (duk_is_object(ctx, 1))
+    {
+        duk_dup(ctx, 1);
+        duk_put_prop_string(ctx, -2, "_callbackData");
+    }
+
+    return 1;
+}
+
 static void js_atomic_destroy_node(Node* node, duk_context* ctx, bool root = false)
 {
 
@@ -291,6 +336,7 @@ static int js_atomic_destroy(duk_context* ctx)
     return 0;
 }
 
+
 void jsapi_init_atomic(JSVM* vm)
 {
     // core modules
@@ -304,6 +350,7 @@ void jsapi_init_atomic(JSVM* vm)
     jsapi_init_network(vm);
 #endif
     jsapi_init_graphics(vm);
+    jsapi_init_audio(vm);
 #ifdef ATOMIC_3D
     jsapi_init_atomic3d(vm);
 #endif
@@ -351,9 +398,9 @@ void jsapi_init_atomic(JSVM* vm)
     // Node registry
     duk_push_global_stash(ctx);
     duk_push_object(ctx);
-    duk_put_prop_index(ctx, -2, JS_GLOBALSTASH_INDEX_NODE_REGISTRY);
-    duk_push_object(ctx);
     duk_put_prop_index(ctx, -2, JS_GLOBALSTASH_VARIANTMAP_CACHE);
+    duk_push_object(ctx);
+    duk_put_prop_index(ctx, -2, JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY);
     duk_pop(ctx);
 
     duk_push_c_function(ctx, js_openConsoleWindow, 0);
@@ -394,6 +441,9 @@ void jsapi_init_atomic(JSVM* vm)
     js_push_class_object_instance(ctx, vm->GetSubsystem<Input>(), "Input");
     duk_put_prop_string(ctx, -2, "input");
 
+    js_push_class_object_instance(ctx, vm->GetSubsystem<Metrics>(), "Metrics");
+    duk_put_prop_string(ctx, -2, "metrics");
+
     duk_push_c_function(ctx, js_atomic_GetFileSystem, 0);
     duk_put_prop_string(ctx, -2, "getFileSystem");
 
@@ -422,14 +472,17 @@ void jsapi_init_atomic(JSVM* vm)
     js_push_class_object_instance(ctx, vm->GetSubsystem<UI>(), "UI");
     duk_put_prop_string(ctx, -2, "ui");
 
-    // end subsystems
-
     duk_push_c_function(ctx, js_atomic_script, 1);
     duk_put_prop_string(ctx, -2, "script");
 
     duk_push_c_function(ctx, js_atomic_destroy, 1);
     duk_put_prop_string(ctx, -2, "destroy");
 
+    duk_push_c_function(ctx, js_atomic_ScriptEvent, 2);
+    duk_put_prop_string(ctx, -2, "ScriptEvent");
+
+    duk_push_c_function(ctx, js_atomic_ScriptEventData, 2);
+    duk_put_prop_string(ctx, -2, "ScriptEventData");
 
     duk_pop(ctx);
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -76,7 +76,7 @@ public:
         return *this;
     }
 
-    // Test for equality with another hash.
+    /// Test for equality with another hash.
     bool operator ==(const StringHash& rhs) const { return value_ == rhs.value_; }
 
     /// Test for inequality with another hash.
@@ -106,9 +106,23 @@ public:
     /// Zero hash.
     static const StringHash ZERO;
 
+    // ATOMIC BEGIN
+
+    /// Register significant C string, which can be looked up via hash, note that the lookup is case insensitive
+    static void RegisterSignificantString(const char* str);
+
+    /// Register significant string, which can be looked up via hash, note that the lookup is case insensitive
+    static void RegisterSignificantString(const String& str);
+
+    /// Get a significant string from a case insensitive hash value
+    static bool GetSignificantString(unsigned hash, String& strOut);
+
+    // ATOMIC END
+
 private:
     /// Hash value.
     unsigned value_;
+
 };
 
 }

@@ -8,7 +8,8 @@
 	"excludes" : {
 		"Scene" : {
 			"GetComponent" : ["unsigned"],
-			"MarkReplicationDirty" : ["Node"]
+			"MarkReplicationDirty" : ["Node"],
+			"GetRequiredPackageFiles" : []
 		}
 	},
 	"overloads" : {
@@ -30,8 +31,8 @@
 
 		"Serializable" : [
 			"getAttributes():AttributeInfo[];",
-			"getAttribute(name:string):any;",
-			"setAttribute(name:string, value:any):void;"
+			"getAttribute(name:string, index?:number):any;",
+			"setAttribute(name:string, value:any, index?:number):void;"
 		],
 		"Node" : [
 			"saveXML(file:File):boolean;",
@@ -39,7 +40,8 @@
 			"getChildrenWithName(name:string, recursive?:boolean):Node[];",
 			"getChildrenWithComponent(componentType:string, recursive?:boolean):Node[];",
 			"getComponents(componentType?:string, recursive?:boolean):Component[];",
-			"getComponent<T extends Atomic.Component>(type: string): T;",
+			"getComponent<T extends Atomic.Component>(type: string, recursive?: boolean): T;",
+			"getParentComponent<T extends Atomic.Component>(type: string, fullTraversal?: boolean): T;",
 			"getChildAtIndex(index:number):Node;",
 			"createJSComponent(name:string, args?:{});",
 			"getJSComponent(name:string, recursive?:boolean): JSComponent;",

@@ -31,9 +31,9 @@
 #include <Atomic/Resource/XMLFile.h>
 #include <Atomic/Resource/ResourceCache.h>
 
-#include <Atomic/Atomic3D/AnimatedModel.h>
-#include <Atomic/Atomic3D/Animation.h>
-#include <Atomic/Atomic3D/AnimationController.h>
+#include <Atomic/Graphics/AnimatedModel.h>
+#include <Atomic/Graphics/Animation.h>
+#include <Atomic/Graphics/AnimationController.h>
 
 #include <Atomic/Graphics/Geometry.h>
 #include <Atomic/Graphics/IndexBuffer.h>
@@ -53,6 +53,8 @@ OpenAssetImporter::OpenAssetImporter(Context* context) : Object(context) ,
     scene_(0),
     rootNode_(0),
     useSubdirs_(true),
+    importMaterials_(true),
+    importMaterialsDefault_(true),
     localIDs_(false),
     saveBinary_(false),
     createZone_(true),
@@ -64,12 +66,14 @@ OpenAssetImporter::OpenAssetImporter(Context* context) : Object(context) ,
     noEmptyNodes_(false),
     saveMaterialList_(false),
     includeNonSkinningBones_(false),
+    includeNonSkinningBonesDefault_(false),
     verboseLog_(false),
     emissiveAO_(false),
     noOverwriteMaterial_(true),
     noOverwriteTexture_(true),
     noOverwriteNewerTexture_(true),
     checkUniqueModel_(true),
+    useVertexColors_(false),
     scale_(1.0f),
     maxBones_(64),
     defaultTicksPerSecond_(4800.0f),
@@ -902,6 +906,12 @@ void OpenAssetImporter::SetOveriddenFlags(VariantMap& aiFlagParameters)
             ApplyFlag(aiProcess_FindInstances, itr->second_.GetBool());
         else if (itr->first_ == "aiProcess_OptimizeMeshes")
             ApplyFlag(aiProcess_OptimizeMeshes, itr->second_.GetBool());
+        else if (itr->first_ == "ImportMaterials")
+            importMaterialsDefault_ = itr->second_.GetBool();
+        else if (itr->first_ == "IncludeNonSkinningBones")
+            includeNonSkinningBonesDefault_ = itr->second_.GetBool();
+        else if (itr->first_ == "useVertexColors")
+            useVertexColors_ = itr->second_.GetBool();
 
         itr++;
     }
@@ -1184,13 +1194,17 @@ bool OpenAssetImporter::BuildAndSaveAnimations(OutModel* model, const String &an
 // Materials
 void OpenAssetImporter::ExportMaterials(HashSet<String>& usedTextures)
 {
-    if (useSubdirs_)
+    if (importMaterials_ )
     {
-        context_->GetSubsystem<FileSystem>()->CreateDir(sourceAssetPath_ + "Materials");
+        if (useSubdirs_)
+        {
+            context_->GetSubsystem<FileSystem>()->CreateDir(sourceAssetPath_ + "Materials");
+        }
+
+        for (unsigned i = 0; i < scene_->mNumMaterials; ++i)
+            BuildAndSaveMaterial(scene_->mMaterials[i], usedTextures);
     }
 
-    for (unsigned i = 0; i < scene_->mNumMaterials; ++i)
-        BuildAndSaveMaterial(scene_->mMaterials[i], usedTextures);
 }
 
 bool OpenAssetImporter::BuildAndSaveMaterial(aiMaterial* material, HashSet<String>& usedTextures)
@@ -1274,6 +1288,25 @@ bool OpenAssetImporter::BuildAndSaveMaterial(aiMaterial* material, HashSet<Strin
     }
     if (hasAlpha)
         techniqueName += "Alpha";
+
+    // See if any mesh that uses this material has vertex colors
+    // and set the technique accordingly, if enabled
+    for (unsigned i = 0; i < scene_->mNumMeshes && useVertexColors_; i++)
+    {
+        aiMesh* mesh = scene_->mMeshes[i];
+        aiMaterial* mesh_material = scene_->mMaterials[mesh->mMaterialIndex];
+        aiString meshMatNameStr;
+        mesh_material->Get(AI_MATKEY_NAME, meshMatNameStr);
+
+        if(mesh->GetNumColorChannels() > 0)
+        {
+             if(matNameStr == meshMatNameStr)
+             {
+                 techniqueName += "VCol";
+                 break;
+             }
+        }
+    }
 
     XMLElement techniqueElem = materialElem.CreateChild("technique");
     techniqueElem.SetString("name", techniqueName + ".xml");

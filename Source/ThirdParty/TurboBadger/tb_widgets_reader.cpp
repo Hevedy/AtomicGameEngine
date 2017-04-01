@@ -42,6 +42,8 @@ void TBWidget::OnInflate(const INFLATE_INFO &info)
 
     SetOpacity(info.node->GetValueFloat("opacity", GetOpacity()));
 
+    SetDisabledOpacity(info.node->GetValueFloat("disabled-Opacity", GetDisabledOpacity()));
+
     if (const char *text = info.node->GetValueString("text", nullptr))
         SetText(text);
 
@@ -155,6 +157,9 @@ TB_WIDGET_FACTORY(TBButton, TBValue::TYPE_NULL, WIDGET_Z_BOTTOM) {}
 void TBButton::OnInflate(const INFLATE_INFO &info)
 {
     SetToggleMode(info.node->GetValueInt("toggle-mode", GetToggleMode()) ? true : false);
+    // ATOMIC BEGIN
+    SetURL(info.node->GetValueString("url", ""));
+    // ATOMIC END
     TBWidget::OnInflate(info);
 }
 

@@ -58,8 +58,6 @@ bool ImportConfig::LoadModelImporterConfig(const JSONValue& jModelImporterConfig
             valueMap_["aiProcess_ImproveCacheLocality"] = GetBoolValue(jvalue, true);
         else if (key == "fixInFacingNormals")
             valueMap_["aiProcess_FixInfacingNormals"] = GetBoolValue(jvalue, true);
-        else if (key == "fixInfacingNormals")
-            valueMap_["aiProcess_FixInfacingNormals"] = GetBoolValue(jvalue, true);
         else if (key == "findInvalidData")
             valueMap_["aiProcess_FindInvalidData"] = GetBoolValue(jvalue, true);
         else if (key == "genUVCoords")
@@ -68,6 +66,12 @@ bool ImportConfig::LoadModelImporterConfig(const JSONValue& jModelImporterConfig
             valueMap_["aiProcess_FindInstances"] = GetBoolValue(jvalue, true);
         else if (key == "optimizeMeshes")
             valueMap_["aiProcess_OptimizeMeshes"] = GetBoolValue(jvalue, true);
+        else if (key == "importMaterials")
+            valueMap_["ImportMaterials"] = GetBoolValue(jvalue, true);
+        else if (key == "includeNonSkinningBones")
+            valueMap_["IncludeNonSkinningBones"] = GetBoolValue(jvalue, true);
+        else if (key == "useVertexColors")
+            valueMap_["useVertexColors"] = GetBoolValue(jvalue, false);
     }
 
     return true;
@@ -97,7 +101,6 @@ bool ImportConfig::LoadDesktopConfig(JSONValue root)
     const JSONValue& jModelImporterConfig = jdesktop["ModelImporter"];
     if (jModelImporterConfig.IsObject())
         LoadModelImporterConfig(jModelImporterConfig);
- 
     const JSONValue& jTextureImporterConfig = jdesktop["TextureImporter"];
     if (jTextureImporterConfig.IsObject())
         LoadTextureImporterConfig(jTextureImporterConfig);

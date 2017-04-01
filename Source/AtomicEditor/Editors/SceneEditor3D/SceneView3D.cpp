@@ -35,10 +35,10 @@
 #include <Atomic/Graphics/Octree.h>
 #include <Atomic/Graphics/Material.h>
 
-#include <Atomic/Atomic3D/Model.h>
-#include <Atomic/Atomic3D/StaticModel.h>
-#include <Atomic/Atomic3D/AnimatedModel.h>
-#include <Atomic/Atomic3D/AnimationController.h>
+#include <Atomic/Graphics/Model.h>
+#include <Atomic/Graphics/StaticModel.h>
+#include <Atomic/Graphics/AnimatedModel.h>
+#include <Atomic/Graphics/AnimationController.h>
 
 #include <Atomic/Input/Input.h>
 
@@ -66,6 +66,13 @@ using namespace ToolCore;
 namespace AtomicEditor
 {
 
+const int CAMERASNAP_TOP = 1;
+const int CAMERASNAP_BOTTOM = 2;
+const int CAMERASNAP_LEFT = 3;
+const int CAMERASNAP_RIGHT = 4;
+const int CAMERASNAP_FRONT = 5;
+const int CAMERASNAP_BACK = 6;
+
 SceneView3D ::SceneView3D(Context* context, SceneEditor3D *sceneEditor) :
     UISceneView(context),
     yaw_(0.0f),
@@ -73,7 +80,13 @@ SceneView3D ::SceneView3D(Context* context, SceneEditor3D *sceneEditor) :
     mouseLeftDown_(false),
     mouseMoved_(false),
     enabled_(true),
-    cameraMove_(false)
+    cameraMove_(false),
+    cameraMoveSpeed_(20.0f),
+    gridEnabled_(false),
+    perspectCamPosition_(0, 0, 0),
+    perspectiveYaw_(0),
+    perspectivePitch_(0),
+    fromOrthographic_(false)
 {
 
     sceneEditor_ = sceneEditor;
@@ -94,7 +107,7 @@ SceneView3D ::SceneView3D(Context* context, SceneEditor3D *sceneEditor) :
 
     if (octree_.Null())
     {
-        LOGWARNING("Scene without an octree loaded");
+        ATOMIC_LOGWARNING("Scene without an octree loaded");
         octree_ = scene_->CreateComponent<Octree>();
     }
 
@@ -112,17 +125,17 @@ SceneView3D ::SceneView3D(Context* context, SceneEditor3D *sceneEditor) :
     SetView(scene_, camera_);
     SetAutoUpdate(false);
 
-    SubscribeToEvent(E_UPDATE, HANDLER(SceneView3D, HandleUpdate));
-    SubscribeToEvent(E_POSTRENDERUPDATE, HANDLER(SceneView3D, HandlePostRenderUpdate));
+    SubscribeToEvent(E_UPDATE, ATOMIC_HANDLER(SceneView3D, HandleUpdate));
+    SubscribeToEvent(E_POSTRENDERUPDATE, ATOMIC_HANDLER(SceneView3D, HandlePostRenderUpdate));
 
-    SubscribeToEvent(E_MOUSEMOVE, HANDLER(SceneView3D,HandleMouseMove));
+    SubscribeToEvent(E_MOUSEMOVE, ATOMIC_HANDLER(SceneView3D,HandleMouseMove));
 
-    SubscribeToEvent(this, E_DRAGENTERWIDGET, HANDLER(SceneView3D, HandleDragEnterWidget));
-    SubscribeToEvent(this, E_DRAGEXITWIDGET, HANDLER(SceneView3D, HandleDragExitWidget));
-    SubscribeToEvent(this, E_DRAGENDED, HANDLER(SceneView3D, HandleDragEnded));
+    SubscribeToEvent(this, E_DRAGENTERWIDGET, ATOMIC_HANDLER(SceneView3D, HandleDragEnterWidget));
+    SubscribeToEvent(this, E_DRAGEXITWIDGET, ATOMIC_HANDLER(SceneView3D, HandleDragExitWidget));
+    SubscribeToEvent(this, E_DRAGENDED, ATOMIC_HANDLER(SceneView3D, HandleDragEnded));
 
-    SubscribeToEvent(E_UIUNHANDLEDSHORTCUT, HANDLER(SceneView3D, HandleUIUnhandledShortcut));
-    SubscribeToEvent(E_UIWIDGETFOCUSESCAPED, HANDLER(SceneView3D, HandleUIWidgetFocusEscaped));
+    SubscribeToEvent(E_UIUNHANDLEDSHORTCUT, ATOMIC_HANDLER(SceneView3D, HandleUIUnhandledShortcut));
+    SubscribeToEvent(E_UIWIDGETFOCUSESCAPED, ATOMIC_HANDLER(SceneView3D, HandleUIWidgetFocusEscaped));
 
     SetIsFocusable(true);
 
@@ -154,18 +167,47 @@ void SceneView3D::Disable()
 bool SceneView3D::GetOrbitting()
 {
     Input* input = GetSubsystem<Input>();
-    return framedBBox_.defined_ && MouseInView() && input->GetKeyDown(KEY_ALT) && input->GetMouseButtonDown(MOUSEB_LEFT);
+    return framedBBox_.Defined() && MouseInView() && input->GetKeyDown(KEY_ALT) && input->GetMouseButtonDown(MOUSEB_LEFT);
 }
 
 bool SceneView3D::GetZooming()
 {
     Input* input = GetSubsystem<Input>();
-    return MouseInView() && input->GetKeyDown(KEY_ALT) && input->GetMouseMoveWheel();
+    return MouseInView() && input->GetMouseMoveWheel() && !input->GetMouseButtonDown(MOUSEB_RIGHT);
+}
+
+bool SceneView3D::GetChangingCameraSpeed()
+{
+    Input* input = GetSubsystem<Input>();
+    return MouseInView() && input->GetMouseMoveWheel() && input->GetMouseButtonDown(MOUSEB_RIGHT);
+}
+
+void SceneView3D::CheckCameraSpeedBounds()
+{
+    const float MAX_CAMERA_SPEED = 80.0f;
+    const float MIN_CAMERA_SPEED = 2.0f;
+
+    if (cameraMoveSpeed_ >= MAX_CAMERA_SPEED)
+    {
+        cameraMoveSpeed_ = MAX_CAMERA_SPEED;
+    }
+    if (cameraMoveSpeed_ <= MIN_CAMERA_SPEED)
+        cameraMoveSpeed_ = MIN_CAMERA_SPEED;
 }
 
 
 void SceneView3D::MoveCamera(float timeStep)
 {
+    // Mouse sensitivity as degrees per pixel
+    const float MOUSE_SENSITIVITY = 0.2f;
+    // Tempo at which mouse speed increases using mousewheel
+    const float CAMERA_MOVE_TEMPO = 5.0f;
+    // Tempo used when zooming in and out
+    const float ZOOM_TEMPO = 0.6f;
+    // Orthographic zoom settings
+    const float ZOOM_INCREMENT = 0.1f;
+    const float DEFAULT_ZOOM = 1.0f;
+
     if (!enabled_ && !GetFocus())
         return;
 
@@ -177,14 +219,7 @@ void SceneView3D::MoveCamera(float timeStep)
     bool mouseInView = MouseInView();
     bool orbitting = GetOrbitting();
     bool zooming = GetZooming();
-
-    // Movement speed as world units per second
-    float MOVE_SPEED = 20.0f;
-    // Mouse sensitivity as degrees per pixel
-    const float MOUSE_SENSITIVITY = 0.2f;
-
-    if (shiftDown)
-        MOVE_SPEED *= 3.0f;
+    bool changingCameraSpeed = GetChangingCameraSpeed();
 
     // Use this frame's mouse motion to adjust camera node yaw and pitch. Clamp the pitch between -90 and 90 degrees
     if ((mouseInView && input->GetMouseButtonDown(MOUSEB_RIGHT)) || orbitting)
@@ -193,20 +228,26 @@ void SceneView3D::MoveCamera(float timeStep)
         IntVector2 mouseMove = input->GetMouseMove();
         yaw_ += MOUSE_SENSITIVITY * mouseMove.x_;
         pitch_ += MOUSE_SENSITIVITY * mouseMove.y_;
-        pitch_ = Clamp(pitch_, -90.0f, 90.0f);
+        pitch_ = Atomic::Clamp(pitch_, -90.0f, 90.0f);
+        input->SetMouseVisible(false);
+    }
+    else
+    {
+        input->SetMouseVisible(true);
     }
 
     // Construct new orientation for the camera scene node from yaw and pitch. Roll is fixed to zero
     Quaternion q(pitch_, yaw_, 0.0f);
 
-    if (!zooming)
+    if (!zooming || !changingCameraSpeed)
         cameraNode_->SetRotation(q);
 
     if (orbitting)
     {
+        zooming = false;
         BoundingBox bbox;
         sceneEditor_->GetSelection()->GetBounds(bbox);
-        if (bbox.defined_)
+        if (bbox.Defined())
         {
             Vector3 centerPoint = bbox.Center();
             Vector3 d = cameraNode_->GetWorldPosition() - centerPoint;
@@ -217,12 +258,28 @@ void SceneView3D::MoveCamera(float timeStep)
 
     if (zooming)
     {
+        orbitting = false;
         Ray ray = GetCameraRay();
         Vector3 wpos = cameraNode_->GetWorldPosition();
-        wpos += ray.direction_ * (float (input->GetMouseMoveWheel()) * (shiftDown ? 0.6f : 0.2f));
+        wpos += ray.direction_ * (float(input->GetMouseMoveWheel()) * ZOOM_TEMPO);
         cameraNode_->SetWorldPosition(wpos);
     }
 
+    if (changingCameraSpeed)
+    {
+
+        int mouseWheel = input->GetMouseMoveWheel();
+
+        // Apple decided to change the direction of mousewheel input to match touch devices
+#ifdef ATOMIC_PLATFORM_OSX
+        mouseWheel = -mouseWheel;
+#endif
+
+        if (mouseWheel)
+            cameraMoveSpeed_ += mouseWheel * CAMERA_MOVE_TEMPO;
+
+        CheckCameraSpeedBounds();
+    }
 
 #ifdef ATOMIC_PLATFORM_WINDOWS
     bool superdown = input->GetKeyDown(KEY_LCTRL) || input->GetKeyDown(KEY_RCTRL);
@@ -237,31 +294,32 @@ void SceneView3D::MoveCamera(float timeStep)
         if (input->GetKeyDown(KEY_W))
         {
             SetFocus();
-            cameraNode_->Translate(Vector3::FORWARD * MOVE_SPEED * timeStep);
+            cameraNode_->Translate(Vector3::FORWARD * cameraMoveSpeed_ * timeStep);
         }
         if (input->GetKeyDown(KEY_S))
         {
             SetFocus();
-            cameraNode_->Translate(Vector3::BACK * MOVE_SPEED * timeStep);
+            cameraNode_->Translate(Vector3::BACK * cameraMoveSpeed_ * timeStep);
         }
         if (input->GetKeyDown(KEY_A))
-        {   SetFocus();
-            cameraNode_->Translate(Vector3::LEFT * MOVE_SPEED * timeStep);
+        {
+            SetFocus();
+            cameraNode_->Translate(Vector3::LEFT * cameraMoveSpeed_ * timeStep);
         }
         if (input->GetKeyDown(KEY_D))
         {
             SetFocus();
-            cameraNode_->Translate(Vector3::RIGHT * MOVE_SPEED * timeStep);
+            cameraNode_->Translate(Vector3::RIGHT * cameraMoveSpeed_ * timeStep);
         }
         if (input->GetKeyDown(KEY_E))
         {
             SetFocus();
-            cameraNode_->Translate(Vector3::UP * MOVE_SPEED * timeStep);
+            cameraNode_->Translate(Vector3::UP * cameraMoveSpeed_ * timeStep);
         }
         if (input->GetKeyDown(KEY_Q))
         {
             SetFocus();
-            cameraNode_->Translate(Vector3::DOWN * MOVE_SPEED * timeStep);
+            cameraNode_->Translate(Vector3::DOWN * cameraMoveSpeed_ * timeStep);
         }
     }
 
@@ -280,6 +338,127 @@ void SceneView3D::MoveCamera(float timeStep)
         cameraNode_->SetWorldPosition(pos);
 
     }
+
+    if (camera_->IsOrthographic() && mouseInView && !orbitting)
+    {
+        if (input->GetMouseMoveWheel() > 0)
+            camera_->SetZoom(camera_->GetZoom() + ZOOM_INCREMENT);
+        if (input->GetMouseMoveWheel() < 0)
+            camera_->SetZoom(camera_->GetZoom() - ZOOM_INCREMENT);
+    }
+    else
+        camera_->SetZoom(DEFAULT_ZOOM);
+}
+
+void SceneView3D::SnapCameraToView(int snapView)
+{
+    // the distance the camera snaps from the selected object
+    const int DISTANCE = 5;
+
+    fromOrthographic_ = true;
+
+    // if no object is selected will snap to view relative to camera position
+    if (sceneEditor_->GetSelection()->GetNodes().Size() > 0)
+    {
+        Vector3 selectedNodePos = sceneEditor_->GetSelection()->GetSelectedNode(0)->GetPosition();
+
+        switch (snapView)
+        {
+            case CAMERASNAP_TOP:
+                yaw_ = 0;
+                pitch_ = 90;
+                selectedNodePos.y_ += DISTANCE;
+                break;
+            case CAMERASNAP_BOTTOM:
+                yaw_ = 0;
+                pitch_ = -90;
+                selectedNodePos.y_ -= DISTANCE;
+                break;
+            case CAMERASNAP_LEFT:
+                yaw_ = -90;
+                pitch_ = 0;
+                selectedNodePos.x_ += DISTANCE;
+                break;
+            case CAMERASNAP_RIGHT:
+                yaw_ = 90;
+                pitch_ = 0;
+                selectedNodePos.x_ -= DISTANCE;
+                break;
+            case CAMERASNAP_FRONT:
+                yaw_ = 0;
+                pitch_ = 0;
+                selectedNodePos.z_ -= DISTANCE;
+                break;
+            case CAMERASNAP_BACK:
+                yaw_ = 180;
+                pitch_ = 0;
+                selectedNodePos.z_ += DISTANCE;
+                break;
+        }
+        cameraNode_->SetPosition(selectedNodePos);
+        camera_->SetOrthographic(true);
+    }
+
+    cameraNode_->SetRotation(Quaternion(pitch_, yaw_, 0));
+
+
+}
+
+void SceneView3D::SelectView()
+{
+    if (MouseInView())
+    {
+        Input* input = GetSubsystem<Input>();
+
+        int snapView = 0;
+
+        if (!camera_->IsOrthographic() && !fromOrthographic_)
+            SavePerspectiveCameraPosition();
+
+        if (input->GetKeyPress(KEY_1))
+            snapView = CAMERASNAP_TOP;
+        if (input->GetKeyPress(KEY_2))
+            snapView = CAMERASNAP_BOTTOM;
+        if (input->GetKeyPress(KEY_3))
+            snapView = CAMERASNAP_LEFT;
+        if (input->GetKeyPress(KEY_4))
+            snapView = CAMERASNAP_RIGHT;
+        if (input->GetKeyPress(KEY_5))
+            snapView = CAMERASNAP_FRONT;
+        if (input->GetKeyPress(KEY_6))
+            snapView = CAMERASNAP_BACK;
+
+        if (snapView != 0)
+            SnapCameraToView(snapView);
+
+        if (input->GetKeyPress(KEY_P))
+        {
+            fromOrthographic_ = false;
+            camera_->SetOrthographic(false);
+
+            pitch_ = perspectivePitch_;
+            yaw_ = perspectiveYaw_;
+            cameraNode_->SetPosition(perspectCamPosition_);
+            cameraNode_->SetRotation(Quaternion(pitch_, yaw_, 0));
+        }
+
+        if (input->GetKeyPress(KEY_O))
+        {
+            if (!camera_->IsOrthographic())
+                SavePerspectiveCameraPosition();
+
+            camera_->SetOrthographic(!camera_->IsOrthographic());
+        }
+
+    }
+
+}
+
+void SceneView3D::SavePerspectiveCameraPosition()
+{
+    perspectCamPosition_ = cameraNode_->GetPosition();
+    perspectivePitch_ = pitch_;
+    perspectiveYaw_ = yaw_;
 }
 
 Ray SceneView3D::GetCameraRay()
@@ -444,7 +623,7 @@ void SceneView3D::HandlePostRenderUpdate(StringHash eventType, VariantMap& event
     else
     {
         mouseLeftDown_ = true;
-        if (Abs(input->GetMouseMoveX() > 3 || input->GetMouseMoveY() >  3))
+        if (Atomic::Abs(input->GetMouseMoveX() > 3 || input->GetMouseMoveY() >  3))
         {
             mouseMoved_ = true;
         }
@@ -465,6 +644,15 @@ bool SceneView3D::OnEvent(const TBWidgetEvent &ev)
         {
             sceneEditor_->GetSelection()->Clear();
         }
+    }
+    if (ev.type == EVENT_TYPE_KEY_DOWN)
+    {
+        Input* input = GetSubsystem<Input>();
+
+        if (input->GetKeyPress(KEY_G))
+            gridEnabled_ = !gridEnabled_;
+
+        SelectView();
     }
 
     return sceneEditor_->OnEvent(ev);
@@ -488,6 +676,10 @@ void SceneView3D::HandleUpdate(StringHash eventType, VariantMap& eventData)
     MoveCamera(timeStep);
 
     QueueUpdate();
+
+    if (gridEnabled_)
+        debugRenderer_->CreateGrid(Color::GRAY, true, cameraNode_->GetPosition());
+
 
     if (preloadResourceScene_.NotNull())
     {
@@ -661,7 +853,7 @@ void SceneView3D::FrameSelection()
     BoundingBox bbox;
     sceneEditor_->GetSelection()->GetBounds(bbox);
 
-    if (!bbox.defined_)
+    if (!bbox.Defined())
         return;
 
     Sphere sphere(bbox);

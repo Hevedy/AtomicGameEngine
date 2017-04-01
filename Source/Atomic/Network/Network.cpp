@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -38,7 +38,10 @@
 #include "../Network/Protocol.h"
 #include "../Scene/Scene.h"
 
+// ATOMIC BEGIN
 #include <kNet/include/kNet.h>
+#include <kNet/include/kNet/EndPoint.h>
+// ATOMIC END
 
 #include "../DebugNew.h"
 
@@ -53,15 +56,18 @@ Network::Network(Context* context) :
     simulatedLatency_(0),
     simulatedPacketLoss_(0.0f),
     updateInterval_(1.0f / (float)DEFAULT_UPDATE_FPS),
-    updateAcc_(0.0f)
+    updateAcc_(0.0f),
+// ATOMIC BEGIN
+    serverPort_(0xFFFF)
+// ATOMIC END
 {
     network_ = new kNet::Network();
 
     // Register Network library object factories
     RegisterNetworkLibrary(context_);
 
-    SubscribeToEvent(E_BEGINFRAME, HANDLER(Network, HandleBeginFrame));
-    SubscribeToEvent(E_RENDERUPDATE, HANDLER(Network, HandleRenderUpdate));
+    SubscribeToEvent(E_BEGINFRAME, ATOMIC_HANDLER(Network, HandleBeginFrame));
+    SubscribeToEvent(E_RENDERUPDATE, ATOMIC_HANDLER(Network, HandleRenderUpdate));
 
     // Blacklist remote events which are not to be allowed to be registered in any case
     blacklistedRemoteEvents_.Insert(E_CONSOLECOMMAND);
@@ -140,7 +146,7 @@ void Network::HandleMessage(kNet::MessageConnection* source, kNet::packet_id_t p
         connection->SendEvent(E_NETWORKMESSAGE, eventData);
     }
     else
-        LOGWARNING("Discarding message from unknown MessageConnection " + ToString((void*)source));
+        ATOMIC_LOGWARNING("Discarding message from unknown MessageConnection " + ToString((void*)source));
 }
 
 u32 Network::ComputeContentID(kNet::message_id_t msgId, const char* data, size_t numBytes)
@@ -173,7 +179,7 @@ void Network::NewConnectionEstablished(kNet::MessageConnection* connection)
     SharedPtr<Connection> newConnection(new Connection(context_, true, kNet::SharedPtr<kNet::MessageConnection>(connection)));
     newConnection->ConfigureNetworkSimulator(simulatedLatency_, simulatedPacketLoss_);
     clientConnections_[connection] = newConnection;
-    LOGINFO("Client " + newConnection->ToString() + " connected");
+    ATOMIC_LOGINFO("Client " + newConnection->ToString() + " connected");
 
     using namespace ClientConnected;
 
@@ -191,7 +197,7 @@ void Network::ClientDisconnected(kNet::MessageConnection* connection)
     if (i != clientConnections_.End())
     {
         Connection* connection = i->second_;
-        LOGINFO("Client " + connection->ToString() + " disconnected");
+        ATOMIC_LOGINFO("Client " + connection->ToString() + " disconnected");
 
         using namespace ClientDisconnected;
 
@@ -205,7 +211,7 @@ void Network::ClientDisconnected(kNet::MessageConnection* connection)
 
 bool Network::Connect(const String& address, unsigned short port, Scene* scene, const VariantMap& identity)
 {
-    PROFILE(Connect);
+    ATOMIC_PROFILE(Connect);
 
     // If a previous connection already exists, disconnect it and wait for some time for the connection to terminate
     if (serverConnection_)
@@ -223,12 +229,12 @@ bool Network::Connect(const String& address, unsigned short port, Scene* scene, 
         serverConnection_->SetConnectPending(true);
         serverConnection_->ConfigureNetworkSimulator(simulatedLatency_, simulatedPacketLoss_);
 
-        LOGINFO("Connecting to server " + serverConnection_->ToString());
+        ATOMIC_LOGINFO("Connecting to server " + serverConnection_->ToString());
         return true;
     }
     else
     {
-        LOGERROR("Failed to connect to server " + address + ":" + String(port));
+        ATOMIC_LOGERROR("Failed to connect to server " + address + ":" + String(port));
         SendEvent(E_CONNECTFAILED);
         return false;
     }
@@ -239,7 +245,7 @@ void Network::Disconnect(int waitMSec)
     if (!serverConnection_)
         return;
 
-    PROFILE(Disconnect);
+    ATOMIC_PROFILE(Disconnect);
     serverConnection_->Disconnect(waitMSec);
 }
 
@@ -248,16 +254,20 @@ bool Network::StartServer(unsigned short port)
     if (IsServerRunning())
         return true;
 
-    PROFILE(StartServer);
+    ATOMIC_PROFILE(StartServer);
+
+// ATOMIC BEGIN
+    serverPort_ = port;
+// ATOMIC END
 
     if (network_->StartServer(port, kNet::SocketOverUDP, this, true) != 0)
     {
-        LOGINFO("Started server on port " + String(port));
+        ATOMIC_LOGINFO("Started server on port " + String(port));
         return true;
     }
     else
     {
-        LOGERROR("Failed to start server on port " + String(port));
+        ATOMIC_LOGERROR("Failed to start server on port " + String(port));
         return false;
     }
 }
@@ -267,11 +277,11 @@ void Network::StopServer()
     if (!IsServerRunning())
         return;
 
-    PROFILE(StopServer);
+    ATOMIC_PROFILE(StopServer);
 
     clientConnections_.Clear();
     network_->StopServer();
-    LOGINFO("Stopped server");
+    ATOMIC_LOGINFO("Stopped server");
 }
 
 void Network::BroadcastMessage(int msgID, bool reliable, bool inOrder, const VectorBuffer& msg, unsigned contentID)
@@ -285,7 +295,7 @@ void Network::BroadcastMessage(int msgID, bool reliable, bool inOrder, const uns
     // Make sure not to use kNet internal message ID's
     if (msgID <= 0x4 || msgID >= 0x3ffffffe)
     {
-        LOGERROR("Can not send message with reserved ID");
+        ATOMIC_LOGERROR("Can not send message with reserved ID");
         return;
     }
 
@@ -293,7 +303,7 @@ void Network::BroadcastMessage(int msgID, bool reliable, bool inOrder, const uns
     if (server)
         server->BroadcastMessage((unsigned long)msgID, reliable, inOrder, 0, contentID, (const char*)data, numBytes);
     else
-        LOGERROR("Server not running, can not broadcast messages");
+        ATOMIC_LOGERROR("Server not running, can not broadcast messages");
 }
 
 void Network::BroadcastRemoteEvent(StringHash eventType, bool inOrder, const VariantMap& eventData)
@@ -317,12 +327,12 @@ void Network::BroadcastRemoteEvent(Node* node, StringHash eventType, bool inOrde
 {
     if (!node)
     {
-        LOGERROR("Null sender node for remote node event");
+        ATOMIC_LOGERROR("Null sender node for remote node event");
         return;
     }
     if (node->GetID() >= FIRST_LOCAL_ID)
     {
-        LOGERROR("Sender node has a local ID, can not send remote node event");
+        ATOMIC_LOGERROR("Sender node has a local ID, can not send remote node event");
         return;
     }
 
@@ -358,7 +368,7 @@ void Network::RegisterRemoteEvent(StringHash eventType)
 {
     if (blacklistedRemoteEvents_.Find(eventType) != blacklistedRemoteEvents_.End())
     {
-        LOGERROR("Attempted to register blacklisted remote event type " + String(eventType));
+        ATOMIC_LOGERROR("Attempted to register blacklisted remote event type " + String(eventType));
         return;
     }
 
@@ -384,12 +394,12 @@ void Network::SendPackageToClients(Scene* scene, PackageFile* package)
 {
     if (!scene)
     {
-        LOGERROR("Null scene specified for SendPackageToClients");
+        ATOMIC_LOGERROR("Null scene specified for SendPackageToClients");
         return;
     }
     if (!package)
     {
-        LOGERROR("Null package specified for SendPackageToClients");
+        ATOMIC_LOGERROR("Null package specified for SendPackageToClients");
         return;
     }
 
@@ -404,7 +414,7 @@ void Network::SendPackageToClients(Scene* scene, PackageFile* package)
 SharedPtr<HttpRequest> Network::MakeHttpRequest(const String& url, const String& verb, const Vector<String>& headers,
     const String& postData)
 {
-    PROFILE(MakeHttpRequest);
+    ATOMIC_PROFILE(MakeHttpRequest);
 
     // The initialization of the request will take time, can not know at this point if it has an error or not
     SharedPtr<HttpRequest> request(new HttpRequest(url, verb, headers, postData));
@@ -452,7 +462,7 @@ bool Network::CheckRemoteEvent(StringHash eventType) const
 
 void Network::Update(float timeStep)
 {
-    PROFILE(UpdateNetwork);
+    ATOMIC_PROFILE(UpdateNetwork);
 
     // Process server connection if it exists
     if (serverConnection_)
@@ -483,7 +493,7 @@ void Network::Update(float timeStep)
 
 void Network::PostUpdate(float timeStep)
 {
-    PROFILE(PostUpdateNetwork);
+    ATOMIC_PROFILE(PostUpdateNetwork);
 
     // Check if periodic update should happen now
     updateAcc_ += timeStep;
@@ -499,7 +509,7 @@ void Network::PostUpdate(float timeStep)
         {
             // Collect and prepare all networked scenes
             {
-                PROFILE(PrepareServerUpdate);
+                ATOMIC_PROFILE(PrepareServerUpdate);
 
                 networkScenes_.Clear();
                 for (HashMap<kNet::MessageConnection*, SharedPtr<Connection> >::Iterator i = clientConnections_.Begin();
@@ -515,7 +525,7 @@ void Network::PostUpdate(float timeStep)
             }
 
             {
-                PROFILE(SendServerUpdate);
+                ATOMIC_PROFILE(SendServerUpdate);
 
                 // Then send server updates for each client connection
                 for (HashMap<kNet::MessageConnection*, SharedPtr<Connection> >::Iterator i = clientConnections_.Begin();
@@ -558,7 +568,7 @@ void Network::OnServerConnected()
 {
     serverConnection_->SetConnectPending(false);
 
-    LOGINFO("Connected to server");
+    ATOMIC_LOGINFO("Connected to server");
 
     // Send the identity map now
     VectorBuffer msg;
@@ -576,12 +586,12 @@ void Network::OnServerDisconnected()
 
     if (!failedConnect)
     {
-        LOGINFO("Disconnected from server");
+        ATOMIC_LOGINFO("Disconnected from server");
         SendEvent(E_SERVERDISCONNECTED);
     }
     else
     {
-        LOGERROR("Failed to connect to server");
+        ATOMIC_LOGERROR("Failed to connect to server");
         SendEvent(E_CONNECTFAILED);
     }
 }
@@ -600,5 +610,55 @@ void RegisterNetworkLibrary(Context* context)
 {
     NetworkPriority::RegisterObject(context);
 }
+
+// ATOMIC BEGIN
+bool Network::ConnectWithExistingSocket(kNet::Socket* existingSocket, Scene* scene)
+{
+    ATOMIC_PROFILE(ConnectWithExistingSocket);
+
+    // If a previous connection already exists, disconnect it and wait for some time for the connection to terminate
+    if (serverConnection_)
+    {
+        serverConnection_->Disconnect(100);
+        OnServerDisconnected();
+    }
+
+    kNet::SharedPtr<kNet::MessageConnection> connection = network_->Connect(existingSocket, this);
+    if (connection)
+    {
+        serverConnection_ = new Connection(context_, false, connection);
+        serverConnection_->SetScene(scene);
+        serverConnection_->SetIdentity(Variant::emptyVariantMap);
+        serverConnection_->SetConnectPending(true);
+        serverConnection_->ConfigureNetworkSimulator(simulatedLatency_, simulatedPacketLoss_);
+
+        ATOMIC_LOGINFO("Connecting to server " + serverConnection_->ToString());
+        return true;
+    }
+    else
+    {
+        ATOMIC_LOGERROR("Failed to connect to server ");
+        SendEvent(E_CONNECTFAILED);
+        return false;
+    }
+}
+
+bool Network::IsEndPointConnected(const kNet::EndPoint& endPoint) const
+{
+    Vector<SharedPtr<Connection> > ret;
+    for (HashMap<kNet::MessageConnection*, SharedPtr<Connection> >::ConstIterator i = clientConnections_.Begin();
+         i != clientConnections_.End(); ++i)
+    {
+        kNet::EndPoint remoteEndPoint = i->first_->GetSocket()->RemoteEndPoint();
+        if (endPoint.ToString()==remoteEndPoint.ToString())
+        {
+            return i->second_->IsConnected();
+        }
+    }
+
+    return false;
+}
+
+// ATOMIC END
 
 }

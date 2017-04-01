@@ -53,19 +53,22 @@ void BuildMac::Initialize()
 
     Vector<String> defaultResourcePaths;
     GetDefaultResourcePaths(defaultResourcePaths);
-    String projectResources = project->GetResourcePath();
+    
 
     for (unsigned i = 0; i < defaultResourcePaths.Size(); i++)
     {
         AddResourceDir(defaultResourcePaths[i]);
     }
+    BuildDefaultResourceEntries();
 
     // TODO: smart filtering of cache
-    AddResourceDir(project->GetProjectPath() + "Cache/");
-    AddResourceDir(projectResources);
+    String projectResources = project->GetResourcePath();
+    AddProjectResourceDir(projectResources);
+    AssetDatabase* db = GetSubsystem<AssetDatabase>();
+    String cachePath = db->GetCachePath();
+    AddProjectResourceDir(cachePath);
 
-    BuildResourceEntries();
-
+    BuildProjectResourceEntries();
 }
 
 bool BuildMac::CheckIncludeResourceFile(const String& resourceDir, const String& fileName)
@@ -102,7 +105,7 @@ void BuildMac::Build(const String& buildPath)
 
     BuildSystem* buildSystem = GetSubsystem<BuildSystem>();
 
-    if (!BuildRemoveDirectory(buildPath_))
+    if (!BuildClean(buildPath_))
         return;
 
     FileSystem* fileSystem = GetSubsystem<FileSystem>();
@@ -122,6 +125,8 @@ void BuildMac::Build(const String& buildPath)
         return;
     if (!BuildCreateDirectory(buildPath_ + "/Contents/Resources"))
         return;
+    if (!BuildCreateDirectory(buildPath_ + "/Contents/Resources/Settings"))
+        return;
 
     String resourcePackagePath = buildPath_ + "/Contents/Resources/AtomicResources" + PAK_EXTENSION;
     GenerateResourcePackage(resourcePackagePath);
@@ -134,6 +139,16 @@ void BuildMac::Build(const String& buildPath)
 
     if (!BuildCopyFile(appSrcPath + "/Contents/MacOS/AtomicPlayer", buildPath_ + "/Contents/MacOS/AtomicPlayer"))
         return;
+
+    String engineJSON(GetSettingsDirectory() + "/Engine.json");
+    
+    if (fileSystem->FileExists(engineJSON))
+    {
+
+        if (!BuildCopyFile(engineJSON, buildPath_ + "/Contents/Resources/Settings/Engine.json"))
+            return;
+
+    }
 
 #ifdef ATOMIC_PLATFORM_OSX
     Vector<String> args;

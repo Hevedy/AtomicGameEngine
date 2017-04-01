@@ -41,9 +41,10 @@
 #include "TMXImporter.h"
 #include "PEXImporter.h"
 #include "TextImporter.h"
-#include "NETAssemblyImporter.h"
 #include "TypeScriptImporter.h"
 #include "ParticleEffectImporter.h"
+#include "CSharpImporter.h"
+#include "NETAssemblyImporter.h"
 
 #include "AssetEvents.h"
 #include "Asset.h"
@@ -171,7 +172,7 @@ bool Asset::Load()
     json_->Load(*file);
     file->Close();
 
-    JSONValue root = json_->GetRoot();
+    JSONValue& root = json_->GetRoot();
 
     assert(root.Get("version").GetInt() == ASSET_VERSION);
 
@@ -182,7 +183,6 @@ bool Asset::Load()
     dirty_ = false;
     if (!CheckCacheFile())
     {
-        LOGINFOF("CheckCacheFile:false - %s", path_.CString());
         dirty_ = true;
     }
 
@@ -274,7 +274,7 @@ bool Asset::CreateImporter()
         {
             importer_ = new ModelImporter(context_, this);
         }
-        if (ext == ".ogg" || ext == ".wav")
+        else if (ext == ".ogg" || ext == ".wav")
         {
             importer_ = new AudioImporter(context_, this);
         }
@@ -324,14 +324,19 @@ bool Asset::CreateImporter()
         }
         else if (ext == ".dll")
         {
-            // TODO: check for native dll
-#ifdef ATOMIC_DOTNET
             importer_ = new NETAssemblyImporter(context_, this);
-#endif
+        }
+        else if (ext == ".cs")
+        {
+            importer_ = new CSharpImporter(context_, this);
         }
         else if (textureFormats.Contains(ext))
         {
             importer_ = new TextureImporter(context_, this);
+        }
+        else
+        {
+            importer_ = new AssetImporter(context_, this);
         }
 
     }

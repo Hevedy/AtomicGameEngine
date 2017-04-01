@@ -114,6 +114,8 @@ public:
         case Bool:
             return "bool";
         case Short:
+            if (isUnsigned_)
+                return "unsigned short";
             return "short";
         case Int:
             if (isUnsigned_)
@@ -150,7 +152,7 @@ public:
         if (!other)
             return false;
 
-        return other->asStringType() == 0 ? false : true;
+        return (other->asStringType() == 0 && other->asStringHashType() == 0) ? false : true;
     }
 
 
@@ -169,7 +171,7 @@ public:
         if (!other)
             return false;
 
-        return other->asStringHashType() == 0 ? false : true;
+        return (other->asStringHashType() == 0 && other->asStringType() == 0)  ? false : true;
     }
 
 };
@@ -220,35 +222,6 @@ public:
 
 };
 
-class JSBVectorType : public JSBType
-{
-
-public:
-
-    JSBType* vectorType_;
-
-    JSBVectorType(JSBType* vtype) : vectorType_(vtype) {}
-
-    virtual JSBVectorType* asVectorType() { return this; }
-
-    String ToString() { return "Vector<" + vectorType_->ToString() + ">"; }
-
-    virtual bool Match (JSBType* other)
-    {
-        if (!other)
-            return false;
-
-        JSBVectorType* pother = other->asVectorType();
-
-        if (!pother || !vectorType_->Match(pother->vectorType_))
-            return false;
-
-        return true;
-    }
-
-};
-
-
 
 class JSBClassType : public JSBType
 {
@@ -283,5 +256,42 @@ public:
 
 
 };
+
+class JSBVectorType : public JSBType
+{
+
+public:
+
+    JSBVectorType(JSBType* vtype, bool podVector = false, bool variantVector = false) : vectorType_(vtype),
+        vectorTypeIsWeakPtr_(false),
+        vectorTypeIsSharedPtr_(false),
+        isPODVector_(podVector),
+        isVariantVector_(variantVector) {}
+
+    virtual JSBVectorType* asVectorType() { return this; }
+
+    String ToString();
+
+    virtual bool Match (JSBType* other)
+    {
+        if (!other)
+            return false;
+
+        JSBVectorType* pother = other->asVectorType();
+
+        if (!pother || !vectorType_->Match(pother->vectorType_))
+            return false;
+
+        return true;
+    }
+
+    JSBType* vectorType_;
+    bool vectorTypeIsWeakPtr_;
+    bool vectorTypeIsSharedPtr_;
+    bool isPODVector_;
+    bool isVariantVector_;
+
+};
+
 
 }

@@ -30,31 +30,11 @@
 namespace Atomic
 {
 
-enum CSComponentMethod
-{
-    CSComponentMethod_Start,
-    CSComponentMethod_DelayedStart,
-    CSComponentMethod_Update,
-    CSComponentMethod_PostUpdate,
-    CSComponentMethod_FixedUpdate,
-    CSComponentMethod_PostFixedUpdate
-};
-
-/// Helper base class for user-defined game logic components that hooks up to update events and forwards them to virtual functions similar to ScriptInstance class.
 class ATOMIC_API CSComponent : public ScriptComponent
 {
     friend class CSComponentFactory;
 
-    enum EventFlags
-    {
-        USE_UPDATE = 0x1,
-        USE_POSTUPDATE = 0x2,
-        USE_FIXEDUPDATE = 0x4,
-        USE_FIXEDPOSTUPDATE = 0x8
-    };
-
-    OBJECT(CSComponent);
-    BASEOBJECT(ScriptComponent);
+    ATOMIC_OBJECT(CSComponent, ScriptComponent)
 
 public:
 
@@ -68,6 +48,7 @@ public:
 
     bool Load(Deserializer& source, bool setInstanceDefault);
     bool LoadXML(const XMLElement& source, bool setInstanceDefault);
+
     void ApplyAttributes();
 
     /// Handle enabled/disabled state change. Changes update event subscription.
@@ -79,15 +60,10 @@ public:
     void SetComponentClassName(const String& name);
     const String& GetComponentClassName() const { return componentClassName_; }
 
-    virtual ScriptComponentFile* GetComponentFile() { return assemblyFile_; }
-
-    CSComponentAssembly* GetAssemblyFile() { return assemblyFile_; }
-    void SetAssemblyFile(CSComponentAssembly* assemblyFile);
-
-    ResourceRef GetAssemblyFileAttr() const;
-    void SetAssemblyFileAttr(const ResourceRef& value);
+    virtual ScriptComponentFile* GetComponentFile();
 
 protected:
+
     /// Handle scene node being assigned at creation.
     virtual void OnNodeSet(Node* node);
     /// Handle scene being assigned.
@@ -95,8 +71,9 @@ protected:
 
 private:
 
+    void SendLoadEvent();
+
     String componentClassName_;
-    SharedPtr<CSComponentAssembly> assemblyFile_;
 
 };
 

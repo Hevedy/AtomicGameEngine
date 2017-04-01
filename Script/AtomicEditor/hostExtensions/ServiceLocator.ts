@@ -23,7 +23,8 @@
 import * as HostExtensionServices from "./HostExtensionServices";
 import * as EditorUI from "../ui/EditorUI";
 import ProjectBasedExtensionLoader from "./coreExtensions/ProjectBasedExtensionLoader";
-import TypescriptLanguageExtension from "./languageExtensions/TypscriptLanguageExtension";
+import TypescriptLanguageExtension from "./languageExtensions/TypescriptLanguageExtension";
+import CSharpLanguageExtension from "./languageExtensions/CSharpLanguageExtension";
 
 /**
  * Generic service locator of editor services that may be injected by either a plugin
@@ -70,9 +71,15 @@ export class ServiceLocatorType implements Editor.HostExtensions.HostServiceLoca
      * @param  {string} eventType
      * @param  {any} data
      */
-    sendEvent(eventType: string, data: any) {
+    sendEvent<T extends Atomic.EventCallbackMetaData>(eventCallbackMetaData:T)
+    sendEvent(eventType: string, data: any)
+    sendEvent(eventTypeOrMetaData: any, data?: any) {
         if (this.eventDispatcher) {
-            this.eventDispatcher.sendEvent(eventType, data);
+            if  (data) {
+                this.eventDispatcher.sendEvent(eventTypeOrMetaData, data);
+            } else {
+                this.eventDispatcher.sendEvent(eventTypeOrMetaData);
+            }
         }
     }
 
@@ -80,10 +87,18 @@ export class ServiceLocatorType implements Editor.HostExtensions.HostServiceLoca
      * Subscribe to an event and provide a callback.  This can be used by services to subscribe to custom events
      * @param  {string} eventType
      * @param  {any} callback
+     * or
+     * @param {Atomic.EventMetaData} wrappedEvent A Atomic pre-wrapped event object
      */
-    subscribeToEvent(eventType: string, callback: (data: any) => void) {
+    subscribeToEvent(eventType: string, callback: (data: any) => void);
+    subscribeToEvent(wrappedEvent: Atomic.EventMetaData);
+    subscribeToEvent(eventTypeOrWrapped: any, callback?: any) {
         if (this.eventDispatcher) {
-            this.eventDispatcher.subscribeToEvent(eventType, callback);
+            if (callback) {
+                this.eventDispatcher.subscribeToEvent(eventTypeOrWrapped, callback);
+            } else {
+                this.eventDispatcher.subscribeToEvent(eventTypeOrWrapped);
+            }
         }
     }
 }
@@ -94,3 +109,4 @@ export default serviceLocator;
 // Load up all the internal services
 serviceLocator.loadService(new ProjectBasedExtensionLoader());
 serviceLocator.loadService(new TypescriptLanguageExtension());
+serviceLocator.loadService(new CSharpLanguageExtension());

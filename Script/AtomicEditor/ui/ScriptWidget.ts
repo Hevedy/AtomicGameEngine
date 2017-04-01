@@ -30,7 +30,7 @@ class ScriptWidget extends Atomic.UIWidget {
         // this.subscribeToEvent(this, "WidgetEvent", this.handleWidgetEvent.bind(this));
 
         // TypeScript-ey
-        this.subscribeToEvent(this, "WidgetEvent", (data) => this.handleWidgetEvent(data));
+        this.subscribeToEvent(this, Atomic.UIWidgetEvent((data) => this.handleWidgetEvent(data)));
 
     }
 
@@ -42,7 +42,7 @@ class ScriptWidget extends Atomic.UIWidget {
 
     handleWidgetEvent(ev: Atomic.UIWidgetEvent): boolean {
 
-        if (ev.type == Atomic.UI_EVENT_TYPE_CLICK) {
+        if (ev.type == Atomic.UI_EVENT_TYPE.UI_EVENT_TYPE_CLICK) {
 
             return this.onEventClick(ev.target, ev.refid);
 

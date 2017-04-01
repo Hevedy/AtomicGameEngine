@@ -47,7 +47,7 @@ EditCmd::~EditCmd()
 
 }
 
-bool EditCmd::Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg)
+bool EditCmd::ParseInternal(const Vector<String>& arguments, unsigned startIndex, String& errorMsg)
 {
     String argument = arguments[startIndex].ToLower();
     String value = startIndex + 1 < arguments.Size() ? arguments[startIndex + 1] : String::EMPTY;
@@ -89,7 +89,7 @@ bool EditCmd::LaunchEditorProcess(const String& command, const Vector<String>& a
 
 void EditCmd::Run()
 {
-    LOGINFOF("Editing project");
+    ATOMIC_LOGINFOF("Editing project");
 
     ToolSystem* tsystem = GetSubsystem<ToolSystem>();
     ToolEnvironment* env = GetSubsystem<ToolCore::ToolEnvironment>();

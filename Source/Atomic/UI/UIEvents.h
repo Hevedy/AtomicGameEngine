@@ -28,111 +28,120 @@ namespace Atomic
 {
 
 // UIUpdate event
-EVENT(E_UIUPDATE, UIUpdate)
+ATOMIC_EVENT(E_UIUPDATE, UIUpdate)
 {
 
 }
 
-EVENT(E_WIDGETEVENT, WidgetEvent)
+ATOMIC_EVENT(E_WIDGETEVENT, WidgetEvent)
 {
-    PARAM(P_HANDLER, Handler);           // UIWidget pointer of widget's OnEvent we are in
-    PARAM(P_TARGET, Target);             // UIWidget pointer
-    PARAM(P_TYPE, Type);                 // EVENT_TYPE enum
-    PARAM(P_X, X);                       // int
-    PARAM(P_Y, Y);                       // int
-    PARAM(P_DELTAX, DeltaX);             // int
-    PARAM(P_DELTAY, DeltaY);             // int
-    PARAM(P_COUNT, Count);               // int
-    PARAM(P_KEY, Key);                   // int
-    PARAM(P_SPECIALKEY, SpecialKey);     // enum SPECIAL_KEY
-    PARAM(P_MODIFIERKEYS, ModifierKeys); // enum MODIFIER_KEYS
-    PARAM(P_REFID, RefID);               // string (TBID)
-    PARAM(P_TOUCH, Touch);               // bool
+    ATOMIC_PARAM(P_HANDLER, Handler);           // UIWidget pointer of widget's OnEvent we are in
+    ATOMIC_PARAM(P_TARGET, Target);             // UIWidget pointer
+    ATOMIC_PARAM(P_TYPE, Type);                 // enum UI_EVENT_TYPE
+    ATOMIC_PARAM(P_X, X);                       // int
+    ATOMIC_PARAM(P_Y, Y);                       // int
+    ATOMIC_PARAM(P_DELTAX, DeltaX);             // int
+    ATOMIC_PARAM(P_DELTAY, DeltaY);             // int
+    ATOMIC_PARAM(P_COUNT, Count);               // int
+    ATOMIC_PARAM(P_KEY, Key);                   // int
+    ATOMIC_PARAM(P_SPECIALKEY, SpecialKey);     // enum SPECIAL_KEY
+    ATOMIC_PARAM(P_MODIFIERKEYS, ModifierKeys); // enum MODIFIER_KEYS
+    ATOMIC_PARAM(P_REFID, RefID);               // string (TBID)
+    ATOMIC_PARAM(P_TOUCH, Touch);               // bool
 
     // EventHandled can be set by event receivers to stop event bubble
-    PARAM(P_HANDLED, Handled);               // [OUT] -> bool
+    ATOMIC_PARAM(P_HANDLED, Handled);               // [OUT] -> bool
 
 }
 
-EVENT(E_WIDGETLOADED, WidgetLoaded)
+ATOMIC_EVENT(E_WIDGETLOADED, WidgetLoaded)
 {
-    PARAM(P_WIDGET, Widget);             // UIWidget pointer
+    ATOMIC_PARAM(P_WIDGET, Widget);             // UIWidget pointer
 }
 
-EVENT(E_WIDGETFOCUSCHANGED, WidgetFocusChanged)
+ATOMIC_EVENT(E_WIDGETFOCUSCHANGED, WidgetFocusChanged)
 {
-    PARAM(P_WIDGET, Widget);             // UIWidget pointer
-    PARAM(P_FOCUSED, Focused);             // bool
+    ATOMIC_PARAM(P_WIDGET, Widget);             // UIWidget pointer
+    ATOMIC_PARAM(P_FOCUSED, Focused);             // bool
 }
 
 
-EVENT(E_WIDGETDELETED, WidgetDeleted)
+ATOMIC_EVENT(E_WIDGETDELETED, WidgetDeleted)
 {
-    PARAM(P_WIDGET, Widget);             // UIWidget pointer
+    ATOMIC_PARAM(P_WIDGET, Widget);             // UIWidget pointer
 }
 
-EVENT(E_DRAGBEGIN, DragBegin)
+ATOMIC_EVENT(E_DRAGBEGIN, DragBegin)
 {
-    PARAM(P_TARGET, Source);             // UIWidget source
-    PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
+    ATOMIC_PARAM(P_TARGET, Source);             // UIWidget source
+    ATOMIC_PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
 }
 
-EVENT(E_DRAGENTERWIDGET, DragEnterWidget)
+ATOMIC_EVENT(E_DRAGENTERWIDGET, DragEnterWidget)
 {
-    PARAM(P_WIDGET, Widget);             // UIWidget pointer
-    PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
+    ATOMIC_PARAM(P_WIDGET, Widget);             // UIWidget pointer
+    ATOMIC_PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
 }
 
-EVENT(E_DRAGEXITWIDGET, DragExitWidget)
+ATOMIC_EVENT(E_DRAGEXITWIDGET, DragExitWidget)
 {
-    PARAM(P_WIDGET, Widget);             // UIWidget pointer
-    PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
+    ATOMIC_PARAM(P_WIDGET, Widget);             // UIWidget pointer
+    ATOMIC_PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
 }
 
-EVENT(E_DRAGENDED, DragEnded)
+ATOMIC_EVENT(E_DRAGENDED, DragEnded)
 {
-    PARAM(P_TARGET, Target);             // UIWidget pointer
-    PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
+    ATOMIC_PARAM(P_TARGET, Target);             // UIWidget pointer
+    ATOMIC_PARAM(P_DRAGOBJECT, DragObject);     // UIDragObject pointer
 }
 
 
-EVENT(E_POPUPMENUSELECT, PopupMenuSelect)
+ATOMIC_EVENT(E_POPUPMENUSELECT, PopupMenuSelect)
 {
-    PARAM(P_BUTTON, Button);             // UIButton that created popup
-    PARAM(P_REFID, RefID);             // string tbid
+    ATOMIC_PARAM(P_BUTTON, Button);             // UIButton that created popup
+    ATOMIC_PARAM(P_REFID, RefID);             // string tbid
 }
 
-EVENT(E_UISHORTCUT, UIShortcut)
+ATOMIC_EVENT(E_UISHORTCUT, UIShortcut)
 {
-    PARAM(P_KEY, Key);                    // int
-    PARAM(P_QUALIFIERS, Qualifiers);        // int
+    ATOMIC_PARAM(P_KEY, Key);                    // int
+    ATOMIC_PARAM(P_QUALIFIERS, Qualifiers);        // int
 
 }
 
-EVENT(E_UIWIDGETFOCUSCHANGED, UIWidgetFocusChanged)
+ATOMIC_EVENT(E_WINDOWCLOSED, WindowClosed)
 {
-    PARAM(P_WIDGET, Widget);             // UIWidget pointer
-    PARAM(P_FOCUSED, Focused);             // bool
+    ATOMIC_PARAM(P_WINDOW, Window);               // UIWindow
 }
-EVENT(E_UIWIDGETFOCUSESCAPED, UIWidgetFocusEscaped)
+
+ATOMIC_EVENT(E_UIWIDGETFOCUSCHANGED, UIWidgetFocusChanged)
+{
+    ATOMIC_PARAM(P_WIDGET, Widget);             // UIWidget pointer
+    ATOMIC_PARAM(P_FOCUSED, Focused);             // bool
+}
+ATOMIC_EVENT(E_UIWIDGETFOCUSESCAPED, UIWidgetFocusEscaped)
 {
 }
 
-EVENT(E_UIWIDGETEDITCOMPLETE, UIWidgetEditComplete)
+ATOMIC_EVENT(E_UIWIDGETEDITCANCELED, UIWidgetEditCanceled)
 {
-    PARAM(P_WIDGET, Widget);             // UIWidget pointer
+    ATOMIC_PARAM(P_WIDGET, Widget);         // UIWidget pointer
 }
 
-EVENT(E_UIUNHANDLEDSHORTCUT, UIUnhandledShortcut)
+ATOMIC_EVENT(E_UIWIDGETEDITCOMPLETE, UIWidgetEditComplete)
 {
-    PARAM(P_REFID, RefID); // string tbid
+    ATOMIC_PARAM(P_WIDGET, Widget);             // UIWidget pointer
 }
 
-EVENT(E_UILISTVIEWSELECTIONCHANGED, UIListViewSelectionChanged)
+ATOMIC_EVENT(E_UIUNHANDLEDSHORTCUT, UIUnhandledShortcut)
 {
-    PARAM(P_REFID, RefID); // string tbid
-    PARAM(P_SELECTED, Selected);        // bool
+    ATOMIC_PARAM(P_REFID, RefID); // string tbid
 }
 
+ATOMIC_EVENT(E_UILISTVIEWSELECTIONCHANGED, UIListViewSelectionChanged)
+{
+    ATOMIC_PARAM(P_REFID, RefID); // string tbid
+    ATOMIC_PARAM(P_SELECTED, Selected);        // bool
+}
 
 }

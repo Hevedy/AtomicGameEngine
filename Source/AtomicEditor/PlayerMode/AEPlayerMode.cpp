@@ -38,7 +38,7 @@
 #include <AtomicJS/Javascript/JSEvents.h>
 #include <AtomicJS/Javascript/JSIPCEvents.h>
 
-#include "AEPlayerEvents.h"
+#include <AtomicApp/Player/IPCPlayerAppEvents.h>
 
 #include "AEPlayerMode.h"
 
@@ -60,15 +60,15 @@ PlayerMode::PlayerMode(Context* context) :
 
     ipc_ = GetSubsystem<IPC>();
 
-    SubscribeToEvent(E_LOGMESSAGE, HANDLER(PlayerMode, HandleLogMessage));
-    SubscribeToEvent(E_JSERROR, HANDLER(PlayerMode, HandleJSError));
-    SubscribeToEvent(E_EXITREQUESTED, HANDLER(PlayerMode, HandleExitRequest));
-    SubscribeToEvent(E_SCREENMODE, HANDLER(PlayerMode, HandlePlayerWindowChanged));
-    SubscribeToEvent(E_WINDOWPOS, HANDLER(PlayerMode, HandlePlayerWindowChanged));
-    SubscribeToEvent(E_UPDATESPAUSEDRESUMED, HANDLER(PlayerMode, HandleUpdatesPausedResumed));
+    SubscribeToEvent(E_LOGMESSAGE, ATOMIC_HANDLER(PlayerMode, HandleLogMessage));
+    SubscribeToEvent(E_JSERROR, ATOMIC_HANDLER(PlayerMode, HandleJSError));
+    SubscribeToEvent(E_EXITREQUESTED, ATOMIC_HANDLER(PlayerMode, HandleExitRequest));
+    SubscribeToEvent(E_SCREENMODE, ATOMIC_HANDLER(PlayerMode, HandlePlayerWindowChanged));
+    SubscribeToEvent(E_WINDOWPOS, ATOMIC_HANDLER(PlayerMode, HandlePlayerWindowChanged));
+    SubscribeToEvent(E_UPDATESPAUSEDRESUMED, ATOMIC_HANDLER(PlayerMode, HandleUpdatesPausedResumed));
 
     // BEGIN LICENSE MANAGEMENT
-    SubscribeToEvent(E_BEGINVIEWRENDER, HANDLER(PlayerMode, HandleViewRender));
+    SubscribeToEvent(E_BEGINVIEWRENDER, ATOMIC_HANDLER(PlayerMode, HandleViewRender));
     // END LICENSE MANAGEMENT
 }
 
@@ -96,7 +96,10 @@ void PlayerMode::HandleIPCInitialize(StringHash eventType, VariantMap& eventData
 
     SystemUI::DebugHud* debugHud = GetSubsystem<SystemUI::DebugHud>();
     if (debugHud)
+    {
         debugHud->SetMode(eventData["debugHudMode"].GetUInt());
+        debugHud->SetProfilerMode((DebugHudProfileMode) eventData["debugHudProfilerMode"].GetUInt());
+    }
 
 }
 
@@ -123,7 +126,7 @@ void PlayerMode::ProcessArguments() {
 
             else if (argument.StartsWith("--ipc-server=") || argument.StartsWith("--ipc-client="))
             {
-                LOGINFOF("Starting IPCWorker %s", argument.CString());
+                ATOMIC_LOGINFOF("Starting IPCWorker %s", argument.CString());
 
                 Vector<String> ipc = argument.Split(argument.CString(), '=');
 
@@ -164,7 +167,7 @@ void PlayerMode::ProcessArguments() {
     if (id > 0 && fd_[0] != INVALID_IPCHANDLE_VALUE && fd_[1] != INVALID_IPCHANDLE_VALUE)
     {
         launchedByEditor_ = true;
-        SubscribeToEvent(E_IPCINITIALIZE, HANDLER(PlayerMode, HandleIPCInitialize));
+        SubscribeToEvent(E_IPCINITIALIZE, ATOMIC_HANDLER(PlayerMode, HandleIPCInitialize));
         ipc_->InitWorker((unsigned) id, fd_[0], fd_[1]);
     }
 }
@@ -191,7 +194,7 @@ void PlayerMode::HandleJSError(StringHash eventType, VariantMap& eventData)
 
         ipc_->SendEventToBroker(E_IPCJSERROR, ipcErrorData);
 
-        LOGERROR("SENDING E_IPCJSERROR");
+        ATOMIC_LOGERROR("SENDING E_IPCJSERROR");
 
     }
 
@@ -240,7 +243,7 @@ void PlayerMode::HandleViewRender(StringHash eventType, VariantMap& eventData)
         done = true;
 
         messageBox_ = GetSubsystem<UI>()->ShowSystemMessageBox("3D Module License Required", "A 3D Module License is required to display 3D content.\n\nUpgrade to Atomic Pro for all features and platforms.");
-        SubscribeToEvent(messageBox_, SystemUI::E_MESSAGEACK, HANDLER(PlayerMode, HandleMessageAck));
+        SubscribeToEvent(messageBox_, SystemUI::E_MESSAGEACK, ATOMIC_HANDLER(PlayerMode, HandleMessageAck));
 
         if (brokerActive_)
         {

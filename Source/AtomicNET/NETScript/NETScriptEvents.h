@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2014-2015, THUNDERBEAST GAMES LLC All rights reserved
+// Copyright (c) 2014-2016, THUNDERBEAST GAMES LLC All rights reserved
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,11 +27,29 @@
 namespace Atomic
 {
 
-/// Frame begin event.
-EVENT(E_CSCOMPONENTCLASSCHANGED, CSComponentClassChanged)
-{
-    PARAM(P_CSCOMPONENT, CSComponent);      // CSComponent Ptr
-    PARAM(P_CLASSNAME, Classname);          // String
-}
+    /// Reference to CSAssembly made
+    ATOMIC_EVENT(E_CSCOMPONENTASSEMBLYREFERENCE, CSComponentAssemblyReference)
+    {
+        ATOMIC_PARAM(P_ASSEMBLYPATH, AssemblyPath); // String
+    }
+
+    ATOMIC_EVENT(E_CSCOMPONENTLOAD, CSComponentLoad)
+    {
+        ATOMIC_PARAM(P_CLASSNAME, ClassName); // String
+        ATOMIC_PARAM(P_NATIVEINSTANCE, NativeInstance); // CSComponent as void*
+        ATOMIC_PARAM(P_FIELDVALUES, FieldValues);  // VariantMap as void*
+    }
+
+    ATOMIC_EVENT(E_CSCOMPONENTASSEMBLYCHANGED, CSComponentAssemblyChanged)
+    {
+        ATOMIC_PARAM(P_RESOURCE, Resource); // Resource
+        ATOMIC_PARAM(P_ASSEMBLYPATH, AssemblyPath); // String
+    }
+
+    ATOMIC_EVENT(E_CSCOMPONENTCLASSCHANGED, CSComponentClassChanged)
+    {
+        ATOMIC_PARAM(P_CSCOMPONENT, Component); // CSComponent*
+        ATOMIC_PARAM(P_CLASSNAME, Classname); // String
+    }
 
 }

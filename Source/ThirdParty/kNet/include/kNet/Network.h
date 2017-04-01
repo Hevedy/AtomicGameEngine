@@ -18,7 +18,8 @@
 
 // Modified by Lasse Oorni for Urho3D
 
-#if defined(KNET_UNIX) || defined(ANDROID)
+// Urho3D: removed the KNET_UNIX definition
+#ifndef _WIN32
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -105,6 +106,15 @@ public:
 	/// Returns the data structure that collects statistics about the whole Network.
 	Lock<StatsEventHierarchyNode> Statistics() { return statistics.Acquire(); }
 
+    // BEGIN ATOMIC
+
+    Socket* CreateUnconnectedUDPSocket(const char *address, unsigned short port);
+
+    /** Connect with an existing socket. This is used when creating a connection with NAT punchthrough. */
+    Ptr(MessageConnection) Connect(Socket* s, IMessageHandler *messageHandler, Datagram *connectMessage = 0);
+
+    // END ATOMIC
+
 private:
 	/// Specifies the local network address of the system. This name is cached here on initialization
 	/// to avoid multiple queries to namespace providers whenever the name is needed.
@@ -175,7 +185,7 @@ private:
 	void Init();
 	void DeInit();
 
-#ifdef WIN32
+#ifdef _WIN32
 	WSADATA wsaData;
 #endif
 };

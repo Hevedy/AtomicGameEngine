@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -33,18 +33,18 @@ class DynamicNavigationMesh;
 /// Obstacle for dynamic navigation mesh.
 class ATOMIC_API Obstacle : public Component
 {
-    OBJECT(Obstacle)
+    ATOMIC_OBJECT(Obstacle, Component)
 
     friend class DynamicNavigationMesh;
 
 public:
     /// Construct.
-    Obstacle(Context*);
+    Obstacle(Context* content);
     /// Destruct.
     virtual ~Obstacle();
 
     /// Register Obstacle with engine context.
-    static void RegisterObject(Context*);
+    static void RegisterObject(Context* context);
 
     /// Update the owning mesh when enabled status has changed.
     virtual void OnSetEnabled();
@@ -53,25 +53,29 @@ public:
     float GetHeight() const { return height_; }
 
     /// Set the height of this obstacle.
-    void SetHeight(float);
+    void SetHeight(float height);
 
     /// Get the blocking radius of this obstacle.
     float GetRadius() const { return radius_; }
 
     /// Set the blocking radius of this obstacle.
-    void SetRadius(float);
+    void SetRadius(float radius);
 
     /// Get the internal obstacle ID.
     unsigned GetObstacleID() const { return obstacleId_; }
 
     /// Render debug information.
-    virtual void DrawDebugGeometry(DebugRenderer*, bool depthTest);
+    virtual void DrawDebugGeometry(DebugRenderer* debug, bool depthTest);
     /// Simplified rendering of debug information for script usage.
     void DrawDebugGeometry(bool depthTest);
 
 protected:
+    /// Handle node being assigned.
+    virtual void OnNodeSet(Node* node);
     /// Handle scene being assigned, identify our DynamicNavigationMesh.
     virtual void OnSceneSet(Scene* scene);
+    /// Handle node transform being dirtied.
+    virtual void OnMarkedDirty(Node* node);
 
 private:
     /// Radius of this obstacle.

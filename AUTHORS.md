@@ -3,9 +3,9 @@
 
 #### THUNDERBEAST GAMES LLC:
 
-- Josh Engebretson (Technical Director)
+- Josh Engebretson (https://github.com/JoshEngebretson)
 
-- Lara Engebretson
+- Lara Engebretson (https://github.com/LaraEngebretson)
 
 ### Contributors:
 
@@ -31,6 +31,28 @@
 
 - Johnny Wahib (https://github.com/JohnnyWahib)
 
+- JimMarlowe (https://github.com/JimMarlowe)
+
+- Tarik Belabbas (https://github.com/Tarik-B)
+
+- Kobus vd Walt (https://github.com/Kobusvdwalt)
+
+- Benjamin Wolf (https://github.com/Benwolf)
+
+- Mahadevan K (https://github.com/bitonator)
+
+- Isaac Burns (https://github.com/flyover)
+
+- Darryl Ryan (https://github.com/darrylryan)
+
+- Alan-FGR (https://github.com/Alan-FGR)
+
+- Ross Hadden (https://github.com/rosshadden)
+
+- Borislav Parvanov (https://github.com/bparvanov)
+
+- Manuel Freiberger (https://github.com/ombre5733)
+
 ### Contribution Copyright and Licensing
 
 Atomic Game Engine contribution copyrights are held by their authors.  Each author retains the copyright to their contribution and agrees to irrevocably license the contribution under the Atomic Game Engine Contribution License `CONTRIBUTION_LICENSE.md`.  Please see `CONTRIBUTING.md` for more details.
@@ -53,9 +75,12 @@ Urho3D development, contributions and bugfixes by:
 - Lasse Öörni (loorni@gmail.com, AgentC at GameDev.net)
 - Wei Tjong Yao
 - Aster Jian
+- Vivienne Anthony
 - Colin Barrett
 - Erik Beran
+- Loic Blot
 - Danny Boisvert
+- Sergey Bosko
 - Carlo Carollo
 - Pete Chown
 - Christian Clavet
@@ -63,35 +88,56 @@ Urho3D development, contributions and bugfixes by:
 - Josh Engebretson
 - Chris Friesen
 - Alex Fuller
+- Henrik Heino
 - Mika Heinonen
+- Jukka Jylänki
 - Graham King
 - Jason Kinzer
+- Eugene Kozlov
 - Gunnar Kriik
+- Aliaksandr Kryvashein
+- Artem Kulyk
+- Rokas Kupstys
 - Ali Kämäräinen
 - Pete Leigh
+- Frode 'Modanung' Lindeijer
 - Thorbjørn Lindeijer
+- Nathanial Lydick
+- Xavier Maupeu
 - Jonne Nauha
 - Paul Noome
 - David Palacios
 - Alex Parlett
 - Jordan Patterson
+- Anton Petrov
 - Vladimir Pobedinsky
+- Franck Poulain
+- Pranjal Raihan
 - Nick Royer
-- Jonathan Sandusky
 - Miika Santala
+- Anatoly Sennov
+- Bengt Soderstrom
+- Hualin Song
 - James Thomas
 - Joshua Tippetts
+- Yusuf Umar
 - Daniel Wiberg
 - Steven Zhang
 - AGreatFish
+- BlueMagnificent
 - Enhex
 - Firegorilla
+- Gordon-F
+- Lumak
 - Magic.Lixin
 - Mike3D
-- Modanung
 - MonkeyFirst
+- Newb I the Newbd
 - OvermindDL1
+- Scellow
 - Skrylar
+- TheComet93
+- Y-way
 - 1vanK
 - andmar1x
 - amadeus_osa
@@ -99,19 +145,29 @@ Urho3D development, contributions and bugfixes by:
 - att
 - celeron55
 - cosmy1
+- damu
+- dragonCASTjosh
 - feltech
+- fredakilla
 - hdunderscore
+- lvshiling
 - marynate
 - mightyCelu
+- neat3d
 - nemerle
 - ninjastone
+- proller
 - raould
 - rasteron
 - reattiva
 - rifai
+- rikorin
 - skaiware
+- ssinai1
+- svifylabs
 - szamq
 - thebluefish
+- tommy3
 - yushli
 
 Urho3D is greatly inspired by OGRE (http://www.ogre3d.org) and Horde3D

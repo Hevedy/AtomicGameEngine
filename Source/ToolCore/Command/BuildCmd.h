@@ -31,22 +31,27 @@ namespace ToolCore
 
 class BuildCmd: public Command
 {
-    OBJECT(BuildCmd);
+    ATOMIC_OBJECT(BuildCmd, Command);
 
 public:
 
     BuildCmd(Context* context);
     virtual ~BuildCmd();
 
-    bool Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg);
-
     void Run();
+
+protected:
+
+    bool ParseInternal(const Vector<String>& arguments, unsigned startIndex, String& errorMsg);
 
 private:
 
     void HandleBuildComplete(StringHash eventType, VariantMap& eventData);
+    
 
     String buildPlatform_;
+    String assetsBuildTag_;
+    bool autoLog_;
 
 };
 

@@ -74,9 +74,9 @@ JSResourceEditor ::JSResourceEditor(Context* context, const String &fullpath, UI
 
     webView_->GetWebTexture2D()->SetClearColor(Color(.23f, .23f, .23f, 1));
 
-    SubscribeToEvent(messageHandler_, E_WEBMESSAGE, HANDLER(JSResourceEditor, HandleWebMessage));
+    SubscribeToEvent(messageHandler_, E_WEBMESSAGE, ATOMIC_HANDLER(JSResourceEditor, HandleWebMessage));
 
-    SubscribeToEvent(E_RENAMERESOURCENOTIFICATION, HANDLER(JSResourceEditor, HandleRenameResourceNotification));
+    SubscribeToEvent(E_RENAMERESOURCENOTIFICATION, ATOMIC_HANDLER(JSResourceEditor, HandleRenameResourceNotification));
 
     c->AddChild(webView_->GetInternalWidget());
 
@@ -121,52 +121,42 @@ void JSResourceEditor::HandleWebMessage(StringHash eventType, VariantMap& eventD
     const String& EDITOR_CHANGE = "editorChange";
     const String& EDITOR_SAVE_CODE = "editorSaveCode";
     const String& EDITOR_SAVE_FILE = "editorSaveFile";
-    const String& EDITOR_GET_USER_PREFS = "editorGetUserPrefs";
-
-    String normalizedPath = getNormalizedPath(fullpath_);
 
     WebMessageHandler* handler = static_cast<WebMessageHandler*>(eventData[P_HANDLER].GetPtr());
 
-    if (request == EDITOR_CHANGE)
+    // All messages come in as a JSON string with a "message" property describing what the message is
+    JSONValue jvalue;
+    if (JSONFile::ParseJSON(request, jvalue, false))
     {
-        SetModified(true);
-    }
-    else
-    {
-        JSONValue jvalue;
-        if (JSONFile::ParseJSON(request, jvalue, false))
+        String message = jvalue["message"].GetString();
+        if (message == EDITOR_CHANGE) {
+            SetModified(true);
+        }
+        else if (message == EDITOR_SAVE_CODE)
         {
-            String message = jvalue["message"].GetString();
-            if (message == EDITOR_SAVE_CODE)
-            {
-                String code = jvalue["payload"].GetString();
-                File file(context_, fullpath_, FILE_WRITE);
-                file.Write((void*) code.CString(), code.Length());
-                file.Close();
-            }
-            else if (message == EDITOR_SAVE_FILE)
-            {
-                String code = jvalue["payload"].GetString();
-                String fn = jvalue["filename"].GetString();
+            String code = jvalue["payload"].GetString();
+            File file(context_, fullpath_, FILE_WRITE);
+            file.Write((void*) code.CString(), code.Length());
+            file.Close();
+        }
+        else if (message == EDITOR_SAVE_FILE)
+        {
+            // filename coming in should be a fully qualified path
+            String code = jvalue["payload"].GetString();
+            String fn = jvalue["filename"].GetString();
 
-                // NOTE: We only want to be able save into the resource directory, so parse out the file path and append
-                // it to the resource directory
-                ToolSystem* tsys = GetSubsystem<ToolSystem>();
-                String fullFilePath = tsys->GetProject()->GetProjectPath() + getNormalizedPath(fn);
-
-                File file(context_, fullFilePath, FILE_WRITE);
-                file.Write((void*) code.CString(), code.Length());
-                file.Close();
-            }
-            else if (message == EDITOR_GET_USER_PREFS)
+            // NOTE: We only want to be able save into the resource directory, so check to see if the file coming in
+            // should live in the resource directory and also for safety check that there is no funky path navigation
+            // going on such as my/resource/../../../out.file
+            ToolSystem* tsys = GetSubsystem<ToolSystem>();
+            if (fn.Find(tsys->GetProject()->GetResourcePath(), 0, false) != String::NPOS
+                && fn.Find("..", 0) == String::NPOS )
             {
-                ToolSystem* tsys = GetSubsystem<ToolSystem>();
-                Project* proj = tsys->GetProject();
-                FileSystem* fileSystem = GetSubsystem<FileSystem>();
-                if (fileSystem->FileExists(proj->GetUserPrefsFullPath()))
-                {
-                    webClient_->ExecuteJavaScript(ToString("HOST_loadPreferences(\"atomic://%s\");", proj->GetUserPrefsFullPath().CString()));
-                }
+                    File file(context_, fn, FILE_WRITE);
+                    file.Write((void*) code.CString(), code.Length());
+                    file.Close();
+            } else {
+                ATOMIC_LOGWARNING("Ignoring attempt to write file: " + fn);
             }
         }
     }
@@ -177,7 +167,7 @@ void JSResourceEditor::HandleWebMessage(StringHash eventType, VariantMap& eventD
 
 void JSResourceEditor::FormatCode()
 {
-    //webClient_->ExecuteJavaScript("beautifyCode();");
+    webClient_->ExecuteJavaScript("HOST_formatCode();");
 }
 
 bool JSResourceEditor::OnEvent(const TBWidgetEvent &ev)
@@ -187,6 +177,41 @@ bool JSResourceEditor::OnEvent(const TBWidgetEvent &ev)
         if (ev.ref_id == TBIDC("close"))
         {
             RequestClose();
+        } else if (ev.ref_id == TBIDC("undo")) {
+            // Need to physically send the CTRL/CMD+Z to the browser so that
+            // the internal editor responds appropriately.  The browser UNDO doesn't fire off
+            // the right events inside the editor.
+            VariantMap map;
+            map[KeyUp::P_KEY] = KEY_Z;
+            map[KeyUp::P_SCANCODE] = SCANCODE_Z;
+            #ifdef ATOMIC_PLATFORM_OSX
+            map["ForceSuperDown"] = true;
+            #else
+            map[KeyUp::P_QUALIFIERS] = QUAL_CTRL;
+            webClient_->SendFocusEvent();
+            #endif
+            webClient_->SendKeyEvent( StringHash("KeyDown"), map);
+        } else if (ev.ref_id == TBIDC("redo")) {
+            // Need to physically send the CTRL/CMD+SHIFT+Z to the browser so that
+            // the internal editor responds appropriately.  The browser REDO doesn't fire off
+            // the right events inside the editor.
+            VariantMap map;
+            map[KeyUp::P_KEY] = KEY_Z;
+            map[KeyUp::P_SCANCODE] = SCANCODE_Z;
+            #ifdef ATOMIC_PLATFORM_OSX
+            map[KeyUp::P_QUALIFIERS] = QUAL_SHIFT;
+            map["ForceSuperDown"] = true;
+            #else
+            map[KeyUp::P_QUALIFIERS] = QUAL_SHIFT | QUAL_CTRL;
+            webClient_->SendFocusEvent();
+            #endif
+            webClient_->SendKeyEvent( StringHash("KeyDown"), map);
+        } else {
+            String shortcut;
+            UI* ui = GetSubsystem<UI>();
+            ui->GetTBIDString(ev.ref_id, shortcut);
+
+            webClient_->ExecuteJavaScript(ToString("HOST_invokeShortcut(\"%s\");", shortcut.CString()));
         }
     }
 
@@ -210,12 +235,12 @@ void JSResourceEditor::SetFocus()
 
 void JSResourceEditor::GotoTokenPos(int tokenPos)
 {
-
+    webClient_->ExecuteJavaScript(ToString("HOST_gotoTokenPos(%d);", tokenPos));
 }
 
 void JSResourceEditor::GotoLineNumber(int lineNumber)
 {
-
+    webClient_->ExecuteJavaScript(ToString("HOST_gotoLineNumber(%d);", lineNumber));
 }
 
 bool JSResourceEditor::Save()

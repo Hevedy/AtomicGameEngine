@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +23,8 @@
 #include "../Precompiled.h"
 
 #include "../Core/Context.h"
-#include "../Core/Thread.h"
+#include "../Core/EventProfiler.h"
+#include "../IO/Log.h"
 
 #include "../DebugNew.h"
 
@@ -54,9 +55,11 @@ void RemoveNamedAttribute(HashMap<StringHash, Vector<AttributeInfo> >& attribute
 
 Context::Context() :
     eventHandler_(0),
+// ATOMIC BEGIN
     editorContext_(false)
+// ATOMIC END
 {
-#ifdef ANDROID
+#ifdef __ANDROID__
     // Always reset the random seed on Android, as the Urho3D library might not be unloaded between runs
     SetRandomSeed(1);
 #endif
@@ -84,6 +87,7 @@ Context::~Context()
     eventDataMaps_.Clear();
 }
 
+// ATOMIC BEGIN
 SharedPtr<Object> Context::CreateObject(StringHash objectType, const XMLElement& source)
 {
     HashMap<StringHash, SharedPtr<ObjectFactory> >::ConstIterator i = factories_.Find(objectType);
@@ -92,6 +96,7 @@ SharedPtr<Object> Context::CreateObject(StringHash objectType, const XMLElement&
     else
         return SharedPtr<Object>();
 }
+// ATOMIC END
 
 void Context::RegisterFactory(ObjectFactory* factory)
 {
@@ -130,7 +135,11 @@ void Context::RegisterAttribute(StringHash objectType, const AttributeInfo& attr
 {
     // None or pointer types can not be supported
     if (attr.type_ == VAR_NONE || attr.type_ == VAR_VOIDPTR || attr.type_ == VAR_PTR)
+    {
+        ATOMIC_LOGWARNING("Attempt to register unsupported attribute type " + Variant::GetTypeName(attr.type_) + " to class " +
+            GetTypeName(objectType));
         return;
+    }
 
     attributes_[objectType].Push(attr);
 
@@ -165,6 +174,13 @@ VariantMap& Context::GetEventDataMap()
 
 void Context::CopyBaseAttributes(StringHash baseType, StringHash derivedType)
 {
+    // Prevent endless loop if mistakenly copying attributes from same class as derived
+    if (baseType == derivedType)
+    {
+        ATOMIC_LOGWARNING("Attempt to copy base attributes to itself for class " + GetTypeName(baseType));
+        return;
+    }
+
     const Vector<AttributeInfo>* baseAttributes = GetAttributes(baseType);
     if (baseAttributes)
     {
@@ -187,6 +203,17 @@ Object* Context::GetSubsystem(StringHash type) const
         return 0;
 }
 
+const Variant& Context::GetGlobalVar(StringHash key) const
+{
+    VariantMap::ConstIterator i = globalVars_.Find(key);
+    return i != globalVars_.End() ? i->second_ : Variant::EMPTY;
+}
+
+void Context::SetGlobalVar(StringHash key, const Variant& value)
+{
+    globalVars_[key] = value;
+}
+
 Object* Context::GetEventSender() const
 {
     if (!eventSenders_.Empty())
@@ -197,9 +224,13 @@ Object* Context::GetEventSender() const
 
 const String& Context::GetTypeName(StringHash objectType) const
 {
+    // ATOMIC BEGIN
+
     // Search factories to find the hash-to-name mapping
     HashMap<StringHash, SharedPtr<ObjectFactory> >::ConstIterator i = factories_.Find(objectType);
-    return i != factories_.End() ? i->second_->GetTypeName() : String::EMPTY;
+    return i != factories_.End() ? i->second_->GetFactoryTypeName() : String::EMPTY;
+    
+    // ATOMIC END
 }
 
 AttributeInfo* Context::GetAttribute(StringHash objectType, const char* name)
@@ -255,6 +286,34 @@ void Context::RemoveEventReceiver(Object* receiver, Object* sender, StringHash e
     HashSet<Object*>* group = GetEventReceivers(sender, eventType);
     if (group)
         group->Erase(receiver);
+}
+
+void Context::BeginSendEvent(Object* sender, StringHash eventType)
+{
+#ifdef ATOMIC_PROFILING
+    if (EventProfiler::IsActive())
+    {
+        EventProfiler* eventProfiler = GetSubsystem<EventProfiler>();
+        if (eventProfiler)
+            eventProfiler->BeginBlock(eventType);
+    }
+#endif
+
+    eventSenders_.Push(sender);
+}
+
+void Context::EndSendEvent()
+{
+    eventSenders_.Pop();
+
+#ifdef ATOMIC_PROFILING
+    if (EventProfiler::IsActive())
+    {
+        EventProfiler* eventProfiler = GetSubsystem<EventProfiler>();
+        if (eventProfiler)
+            eventProfiler->EndBlock();
+    }
+#endif
 }
 
 }

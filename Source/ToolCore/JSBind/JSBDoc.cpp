@@ -85,7 +85,7 @@ String JSBDoc::GenFunctionDoc(JSBFunction* function)
 
     String params;
 
-    Vector<JSBFunctionType*>& parameters = function->GetParameters();
+    const Vector<JSBFunctionType*>& parameters = function->GetParameters();
 
     for (unsigned i = 0; i < parameters.Size(); i++)
     {
@@ -195,7 +195,7 @@ void JSBDoc::ExportModuleClasses(JSBModule* module)
 
         }
 
-        JSBFunction* constructor = klass->GetConstructor();
+        JSBFunction* constructor = klass->GetConstructor(BINDINGLANGUAGE_JAVASCRIPT);
         if (constructor)
         {
             String docs = GenFunctionDoc(constructor);

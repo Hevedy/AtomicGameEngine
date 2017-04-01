@@ -39,9 +39,9 @@ class AnimationImportInfo : public Object
 {
     friend class ModelImporter;
 
-public:
+    ATOMIC_OBJECT(AnimationImportInfo, Object);
 
-    OBJECT(AnimationImportInfo);
+public:    
 
     AnimationImportInfo(Context* context) : Object(context), startTime_(-1.0f), endTime_(-1.0f)
     {
@@ -66,7 +66,7 @@ private:
 
 class ModelImporter : public AssetImporter
 {
-    OBJECT(ModelImporter);
+    ATOMIC_OBJECT(ModelImporter, AssetImporter)
 
 public:
 
@@ -81,6 +81,8 @@ public:
 
     bool GetImportAnimations() { return importAnimations_; }
     void SetImportAnimations(bool importAnimations) { importAnimations_ = importAnimations; }
+    bool GetImportMaterials() { return importMaterials_; }
+    void SetImportMaterials(bool importMat) { importMaterials_ = importMat; };
 
     unsigned GetAnimationCount();
     void SetAnimationCount(unsigned count);
@@ -105,9 +107,12 @@ protected:
     virtual bool LoadSettingsInternal(JSONValue& jsonRoot);
     virtual bool SaveSettingsInternal(JSONValue& jsonRoot);
 
+    void GetAssetCacheMap(HashMap<String, String>& assetMap);
 
     double scale_;
     bool importAnimations_;
+    bool importMaterials_;
+    bool includeNonSkinningBones_;
     Vector<SharedPtr<AnimationImportInfo>> animationInfo_;
 
     SharedPtr<Node> importNode_;

@@ -31,22 +31,23 @@ namespace ToolCore
 
 class BindCmd: public Command
 {
-    OBJECT(BindCmd);
+    ATOMIC_OBJECT(BindCmd, Command);
 
 public:
 
     BindCmd(Context* context);
     virtual ~BindCmd();
 
-    bool Parse(const Vector<String>& arguments, unsigned startIndex, String& errorMsg);
-
     void Run();
 
     bool RequiresProjectLoad() { return false; }
 
+protected:
+
+    bool ParseInternal(const Vector<String>& arguments, unsigned startIndex, String& errorMsg);
+
 private:
 
-    String bindPlatform_;
     String sourceRootFolder_;
     String packageFolder_;
 

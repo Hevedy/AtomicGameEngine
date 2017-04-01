@@ -23,6 +23,8 @@
 #pragma once
 
 #include <Atomic/Core/Object.h>
+#include <Atomic/Resource/JSONValue.h>
+#include "JSBindTypes.h"
 
 using namespace Atomic;
 
@@ -38,6 +40,7 @@ class JSBPackage;
 class JSBHeader;
 class JSBClass;
 class JSBEnum;
+class JSBEvent;
 class JSBPrimitiveType;
 
 class JSBModule : public Object
@@ -45,7 +48,7 @@ class JSBModule : public Object
     friend class JSModuleWriter;
     friend class CSModuleWriter;
 
-    OBJECT(JSBModule)
+    ATOMIC_OBJECT(JSBModule, Object)
 
 public:
 
@@ -62,8 +65,8 @@ public:
     const String& GetName() { return name_; }
     JSBPackage* GetPackage() { return package_; }
 
-    JSBClass* GetClass(const String& name);
-    Vector<SharedPtr<JSBClass>> GetClasses();
+    JSBClass* GetClass(const String& name, bool includeInterfaces = false);
+    Vector<SharedPtr<JSBClass>> GetClasses(bool includeInterfaces = false);
     Vector<SharedPtr<JSBEnum>> GetEnums();
     HashMap<String, Constant>& GetConstants() { return constants_; }
 
@@ -74,6 +77,11 @@ public:
 
     bool ContainsConstant(const String& constantName);
     void RegisterConstant(const String& constantName, const String& value, unsigned type, bool isUnsigned = false);
+
+    JSBEvent* GetEvent(const String& eventID, const String& eventName);
+    void RegisterEvent(JSBEvent* event);
+
+    const Vector<SharedPtr<JSBEvent>>& GetEvents();
 
     bool Requires(const String& requirement) { return requirements_.Contains(requirement); }
 
@@ -88,10 +96,21 @@ public:
     void SetDotNetModule(bool value) { dotNetModule_ = value; }
     bool GetDotNetModule() { return dotNetModule_; }
 
+    /// Define guard for specific module code
+    String GetModuleDefineGuard() const;
+
+    /// Define guard for specific module code
+    String GetClassDefineGuard(const String& name, const String& language = String::EMPTY) const;
+
+    /// Get the module's header files
+    const Vector<SharedPtr<JSBHeader>>& GetHeaders() const { return headers_; }
+
 private:
 
     void ProcessOverloads();
+    void ProcessExcludes(const JSONValue& excludes, BindingLanguage language = BINDINGLANGUAGE_ANY);
     void ProcessExcludes();
+    void ProcessClassExcludes();
     void ProcessTypeScriptDecl();
     void ProcessHaxeDecl();
 
@@ -102,9 +121,13 @@ private:
     SharedPtr<JSBPackage> package_;
     Vector<SharedPtr<JSBHeader>> headers_;
     Vector<String> includes_;
+    Vector<String> jsmodulePreamble_;
 
     Vector<String> sourceDirs_;
     Vector<String> classnames_;
+    Vector<String> interfaceNames_;
+
+    Vector<String> genericClassnames_;
 
     HashMap<String, String> classRenames_;
 
@@ -112,11 +135,15 @@ private:
     HashMap<StringHash, SharedPtr<JSBClass> > classes_;
     HashMap<StringHash, SharedPtr<JSBEnum> > enums_;
 
+    Vector<SharedPtr<JSBEvent> > events_;
+
     HashMap<String, Constant> constants_;
 
     Vector<String> requirements_;
 
     SharedPtr<JSONFile> moduleJSON_;
+
+    HashMap<String, Vector<String>> classExcludes_;
 
     bool dotNetModule_;
 

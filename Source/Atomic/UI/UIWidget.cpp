@@ -40,14 +40,12 @@ UIWidget::UIWidget(Context* context, bool createWidget) : Object(context),
     preferredSize_(new UIPreferredSize()),
     multiTouch_(false)
 {
-    AddRef();
-
     if (createWidget)
     {
         widget_ = new TBWidget();
         widget_->SetDelegate(this);
         GetSubsystem<UI>()->WrapWidget(this, widget_);
-    }
+    }    
 
 }
 
@@ -191,23 +189,25 @@ void UIWidget::ConvertEvent(UIWidget *handler, UIWidget* target, const tb::TBWid
 
 void UIWidget::OnDelete()
 {
+    VariantMap eventData;
+    eventData[WidgetDeleted::P_WIDGET] = this;
+    this->SendEvent(E_WIDGETDELETED, eventData);
+
+    UnsubscribeFromAllEvents();
+
     if (widget_)
     {
         // if we don't have a UI subsystem, we are exiting
         UI* ui = GetSubsystem<UI>();
+
         if (ui)
+        {
             ui->UnwrapWidget(widget_);
+        }
     }
 
     widget_ = 0;
 
-    VariantMap eventData;
-    eventData[WidgetDeleted::P_WIDGET] = this;
-    SendEvent(E_WIDGETDELETED, eventData);
-
-    UnsubscribeFromAllEvents();
-
-    ReleaseRef();
 }
 
 void UIWidget::AddChildAfter(UIWidget* child, UIWidget* otherChild)
@@ -1181,7 +1181,27 @@ void UIWidget::SetTooltip(const String& tooltip)
         return;
 
     widget_->SetTooltip(tooltip.CString());
+
 }
 
+IntVector2 UIWidget::ConvertToRoot(const IntVector2 position) const
+{
+    IntVector2 result = position;
+
+    if (widget_)
+        widget_->ConvertToRoot(result.x_, result.y_);
+
+    return result;
+}
+
+IntVector2 UIWidget::ConvertFromRoot(const IntVector2 position) const
+{
+    IntVector2 result = position;
+
+    if (widget_)
+        widget_->ConvertFromRoot(result.x_, result.y_);
+
+    return result;
+}
 
 }

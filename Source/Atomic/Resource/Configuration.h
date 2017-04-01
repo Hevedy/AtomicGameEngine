@@ -45,12 +45,13 @@ public:
     void ApplyConfig(VariantMap& settings, bool overwrite = false);
 
     const VariantMap& GetConfig() { return valueMap_; }
-    const bool IsLoaded() const { return isLoaded_; }
+    bool IsLoaded() const { return isLoaded_; }
 
 protected:
     static bool GetBoolValue(const JSONValue& jvalue, bool defaultValue);
     static int GetIntValue(const JSONValue& jvalue, int defaultValue);
     static String GetStringValue(const JSONValue& jvalue, const String& defaultValue);
+    static void GetArrayValue(const JSONArray& jarray, StringVector& value);
 
     virtual bool LoadDesktopConfig(JSONValue root) { return true; };
 
@@ -61,6 +62,3 @@ private:
     bool isLoaded_;
 };
 }
-
-
-

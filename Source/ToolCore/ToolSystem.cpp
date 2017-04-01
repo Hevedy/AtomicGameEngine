@@ -21,6 +21,7 @@
 //
 
 #include <Atomic/Core/Context.h>
+#include <Atomic/Core/CoreEvents.h>
 #include <Atomic/IO/FileSystem.h>
 #include <Atomic/Resource/ResourceCache.h>
 
@@ -29,9 +30,9 @@
 #include "Platform/PlatformWindows.h"
 #include "Platform/PlatformAndroid.h"
 #include "Platform/PlatformIOS.h"
+#include "Platform/PlatformLinux.h"
 
 #include "Assets/AssetDatabase.h"
-#include "Net/CurlManager.h"
 #include "License/LicenseSystem.h"
 #include "Build/BuildSystem.h"
 #include "Subprocess/SubprocessSystem.h"
@@ -44,25 +45,16 @@
 #include "Project/ProjectEvents.h"
 #include "Project/ProjectUserPrefs.h"
 
-#ifdef ATOMIC_DOTNET
-#include "NETTools/NETToolSystem.h"
-#endif
-
 namespace ToolCore
 {
 
 ToolSystem::ToolSystem(Context* context) : Object(context),
-    cli_(false)
+    updateDelta_(0.0f)
 {
     context_->RegisterSubsystem(new AssetDatabase(context_));
-    context_->RegisterSubsystem(new CurlManager(context_));
     context_->RegisterSubsystem(new LicenseSystem(context_));
     context_->RegisterSubsystem(new BuildSystem(context_));
     context_->RegisterSubsystem(new SubprocessSystem(context_));
-
-#ifdef ATOMIC_DOTNET
-    context_->RegisterSubsystem(new NETToolSystem(context_));
-#endif
 
     // platform registration
     RegisterPlatform(new PlatformMac(context));
@@ -70,10 +62,27 @@ ToolSystem::ToolSystem(Context* context) : Object(context),
     RegisterPlatform(new PlatformWindows(context));
     RegisterPlatform(new PlatformIOS(context));
     RegisterPlatform(new PlatformAndroid(context));
+    RegisterPlatform(new PlatformLinux(context));
+
+    SubscribeToEvent(E_UPDATE, ATOMIC_HANDLER(ToolSystem, HandleUpdate));
 }
 
 ToolSystem::~ToolSystem()
 {
+
+}
+
+void ToolSystem::HandleUpdate(StringHash eventType, VariantMap& eventData)
+{
+    using namespace Update;
+
+    updateDelta_ += eventData[P_TIMESTEP].GetFloat();
+    
+    if (updateDelta_ >= 0.5f)
+    {
+        updateDelta_ = 0.0f;
+        SendEvent(E_TOOLUPDATE);
+    }
 
 }
 

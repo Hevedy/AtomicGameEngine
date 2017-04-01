@@ -28,6 +28,7 @@
 #include "../ToolEnvironment.h"
 #include "../Project/Project.h"
 #include "../Project/ProjectBuildSettings.h"
+#include "../Assets/AssetDatabase.h"
 
 #include "../Subprocess/SubprocessSystem.h"
 
@@ -149,19 +150,22 @@ void BuildIOS::Initialize()
 
     Vector<String> defaultResourcePaths;
     GetDefaultResourcePaths(defaultResourcePaths);
-    String projectResources = project->GetResourcePath();
+    
 
     for (unsigned i = 0; i < defaultResourcePaths.Size(); i++)
     {
         AddResourceDir(defaultResourcePaths[i]);
     }
+    BuildDefaultResourceEntries();
 
     // TODO: smart filtering of cache
-    AddResourceDir(project->GetProjectPath() + "Cache/");
-    AddResourceDir(projectResources);
+    String projectResources = project->GetResourcePath();
+    AddProjectResourceDir(projectResources);
+    AssetDatabase* db = GetSubsystem<AssetDatabase>();
+    String cachePath = db->GetCachePath();
+    AddProjectResourceDir(cachePath);
 
-    BuildResourceEntries();
-
+    BuildProjectResourceEntries();
 }
 
 void BuildIOS::RunConvertPList()
@@ -184,8 +188,8 @@ void BuildIOS::RunConvertPList()
     SendEvent(E_BUILDOUTPUT, buildOutput);
 
 
-    SubscribeToEvent(subprocess, E_SUBPROCESSCOMPLETE, HANDLER(BuildIOS, HandleConvertPListComplete));
-    SubscribeToEvent(subprocess, E_SUBPROCESSOUTPUT, HANDLER(BuildBase, HandleSubprocessOutputEvent));
+    SubscribeToEvent(subprocess, E_SUBPROCESSCOMPLETE, ATOMIC_HANDLER(BuildIOS, HandleConvertPListComplete));
+    SubscribeToEvent(subprocess, E_SUBPROCESSOUTPUT, ATOMIC_HANDLER(BuildBase, HandleSubprocessOutputEvent));
 
 }
 
@@ -233,8 +237,8 @@ void BuildIOS::RunCodeSign()
     buildOutput[BuildOutput::P_TEXT] = "\n\n<color #D4FB79>Code Signing iOS Deployment</color>\n\n";
     SendEvent(E_BUILDOUTPUT, buildOutput);
 
-    SubscribeToEvent(subprocess, E_SUBPROCESSCOMPLETE, HANDLER(BuildIOS, HandleCodeSignComplete));
-    SubscribeToEvent(subprocess, E_SUBPROCESSOUTPUT, HANDLER(BuildBase, HandleSubprocessOutputEvent));
+    SubscribeToEvent(subprocess, E_SUBPROCESSCOMPLETE, ATOMIC_HANDLER(BuildIOS, HandleCodeSignComplete));
+    SubscribeToEvent(subprocess, E_SUBPROCESSOUTPUT, ATOMIC_HANDLER(BuildBase, HandleSubprocessOutputEvent));
 
 }
 
@@ -282,8 +286,8 @@ void BuildIOS::RunDeploy()
     buildOutput[BuildOutput::P_TEXT] = "\n\n<color #D4FB79>Deploying to iOS Device</color>\n\n";
     SendEvent(E_BUILDOUTPUT, buildOutput);
 
-    SubscribeToEvent(subprocess, E_SUBPROCESSCOMPLETE, HANDLER(BuildIOS, HandleDeployComplete));
-    SubscribeToEvent(subprocess, E_SUBPROCESSOUTPUT, HANDLER(BuildBase, HandleSubprocessOutputEvent));
+    SubscribeToEvent(subprocess, E_SUBPROCESSCOMPLETE, ATOMIC_HANDLER(BuildIOS, HandleDeployComplete));
+    SubscribeToEvent(subprocess, E_SUBPROCESSOUTPUT, ATOMIC_HANDLER(BuildBase, HandleSubprocessOutputEvent));
 
 
 }
@@ -311,27 +315,31 @@ void BuildIOS::Build(const String& buildPath)
 
     Initialize();
 
-    if (fileSystem->DirExists(buildPath_))
-        fileSystem->RemoveDir(buildPath_, true);
+    if (!BuildClean(buildPath_))
+        return;
 
     String buildSourceDir = tenv->GetToolDataDir();
 
     String buildAppSourceDir = buildSourceDir + "Deployment/IOS/AtomicPlayer.app";
 
-    fileSystem->CreateDir(buildPath_);
+    if (!BuildCreateDirectory(buildPath_))
+        return;
 
     String buildDestDist = buildPath_ + "/AtomicPlayer.app";
 
-    fileSystem->CreateDir(buildDestDist);
+    if (!BuildCreateDirectory(buildDestDist))
+        return;
 
     String resourcePackagePath = buildDestDist + "/AtomicResources" + PAK_EXTENSION;
     GenerateResourcePackage(resourcePackagePath);
 
-    fileSystem->Copy(buildAppSourceDir + "/AtomicPlayer", buildDestDist + "/AtomicPlayer");
-    fileSystem->Copy(buildAppSourceDir + "/PkgInfo", buildDestDist + "/PkgInfo");
-
-    fileSystem->Copy(iosSettings->GetProvisionFile(), buildDestDist + "/embedded.mobileprovision");
-
+    if (!BuildCopyFile(buildAppSourceDir + "/AtomicPlayer", buildDestDist + "/AtomicPlayer"))
+        return;
+    if (!BuildCopyFile(buildAppSourceDir + "/PkgInfo", buildDestDist + "/PkgInfo"))
+        return;
+    if (!BuildCopyFile(iosSettings->GetProvisionFile(), buildDestDist + "/embedded.mobileprovision"))
+        return;
+        
     String entitlements = GenerateEntitlements();
     String plist = GenerateInfoPlist();
 

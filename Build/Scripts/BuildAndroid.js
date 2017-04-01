@@ -1,55 +1,51 @@
+var os = require('os');
 var fs = require('fs-extra');
 var path = require("path");
 var host = require("./Host");
-var os = require('os');
-var atomicRoot = host.atomicRoot;
+var config = require('./BuildConfig');
 
-var buildDir = host.artifactsRoot + "Build/Android/";
+var atomicRoot = config.atomicRoot;
+var buildDir = config.artifactsRoot + "Build/Android/";
 
 namespace('build', function() {
 
-  task('android_player', ["build:atomiceditor"], {
-    async: true
-  }, function() {
+    task('android_native', {
+        async: true
+    }, function() {
 
-    // Clean build
-    common.cleanCreateDir(buildDir);
+        host.setupDirs(!config["noclean"], [buildDir]);
 
-    process.chdir(buildDir);
+        process.chdir(buildDir);
 
-    var cmds = [];
+        var cmds = [];
 
-    var scriptModules = host.getScriptModules("ANDROID");
-    var bindCmd = host.atomicTool + " bind \"" + atomicRoot + "\" ";
+        if (os.platform() == "win32") {
+            cmds.push(atomicRoot + "Build/Scripts/Windows/CompileAndroid.bat " + config["config"]);
+        }
+        else {
+            cmds.push("cmake -G \"Unix Makefiles\" -DCMAKE_TOOLCHAIN_FILE=../../../Build/CMake/Toolchains/android.toolchain.cmake -DCMAKE_BUILD_TYPE="  + config["config"] + " ../../../");
+            cmds.push("make -j4");
+        }
 
-    // Generate bindings for each script package
-    for (var pkgName in scriptModules) {
-      cmds.push(bindCmd + "Script/Packages/" + pkgName + "/ ANDROID")
-    }
+        jake.exec(cmds, function() {
 
-    if (os.platform() == "win32") {
-      cmds.push(atomicRoot + "Build/Scripts/Windows/CompileAndroid.bat");
-    }
-    else {
-      cmds.push("cmake -G \"Unix Makefiles\" -DCMAKE_TOOLCHAIN_FILE=../../../Build/CMake/Toolchains/android.toolchain.cmake -DCMAKE_BUILD_TYPE=Release ../../../");
-      cmds.push("make -j4");
-    }
+            var editorResourceFolder = config.artifactsRoot + (os.platform() == "win32" ? "AtomicEditor/Resources/" : "AtomicEditor/AtomicEditor.app/Contents/Resources/");
 
-    jake.exec(cmds, function() {
+            // Install Deployment
+            fs.copySync(buildDir + "Source/AtomicPlayer/Application/libAtomicPlayer.so",
+            editorResourceFolder + "ToolData/Deployment/Android/libs/armeabi-v7a/libAtomicPlayer.so");
 
-      var editorAppFolder = host.artifactsRoot + (os.platform() == "win32" ? "AtomicEditor/" : "AtomicEditor/AtomicEditor.app/");
+            // Install local deployment
+            fs.copySync(buildDir + "Source/AtomicPlayer/Application/libAtomicPlayer.so",
+            atomicRoot + "Artifacts/AtomicEditor/Resources/ToolData/Deployment/Android/libs/armeabi-v7a/libAtomicPlayer.so");
 
-      // Install Deployment
-      fs.copySync(buildDir + "Source/AtomicPlayer/Application/libAtomicPlayer.so",
-        editorAppFolder + "Resources/ToolData/Deployment/Android/libs/armeabi-v7a/libAtomicPlayer.so");
+            complete();
 
-      complete();
+        }, {
+            printStdout: true,
+            printStderr: true
+        });
 
-    }, {
-      printStdout: true,
-      breakOnError : false
     });
-
-  });
 
 }); // end of build namespace

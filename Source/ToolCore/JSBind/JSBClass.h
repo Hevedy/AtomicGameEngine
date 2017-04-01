@@ -24,6 +24,7 @@
 
 #include <Atomic/Core/Object.h>
 
+#include "JSBindTypes.h"
 #include "JSBHeader.h"
 #include "JSBModule.h"
 
@@ -54,6 +55,8 @@ public:
     void Parse() ;
 
     bool parsed_;
+
+    PODVector<BindingLanguage> associatedBindings_;
 };
 
 class JSBProperty
@@ -114,11 +117,11 @@ class JSBClass : public Object
     friend class JSClassWriter;
     friend class CSClassWriter;
 
-    OBJECT(JSBClass)
+    ATOMIC_OBJECT(JSBClass, Object)
 
 public:
 
-    JSBClass(Context* context, JSBModule* module, const String& name, const String& nativeName);
+    JSBClass(Context* context, JSBModule* module, const String& name, const String& nativeName, bool interface);
     virtual ~JSBClass();
 
     const String& GetName() const { return name_; }
@@ -127,7 +130,12 @@ public:
     PODVector<JSBClass*>& GetBaseClasses() {return baseClasses_; }
     PODVector<JSBFunction*>& GetFunctions() { return functions_; }
 
-    bool IsAbstract() { return isAbstract_; }
+    // Get all functions, including those in base classes
+    void GetAllFunctions(PODVector<JSBFunction*>& functions);
+
+    bool IsGeneric() const { return isGeneric_; }
+    bool IsAbstract() const { return isAbstract_; }
+    bool IsInterface() const { return isInterface_; }
 
     /// Note that if we at some point want to generate bindings for JSBClass
     /// this override will need to be addressed, as we'll need to know that JSBClass is
@@ -150,16 +158,21 @@ public:
     JSBHeader* GetHeader() { return header_; }
     JSBModule* GetModule() { return module_; }
     JSBPackage* GetPackage() { return module_->GetPackage(); }
+    const String& GetDocString() const { return docString_; }
 
     bool IsNumberArray() { return numberArrayElements_ != 0; }
     int  GetNumberArrayElements() { return numberArrayElements_;}
     const String& GetArrayElementType() const { return arrayElementType_; }
 
-    JSBFunction* GetConstructor();
+    JSBFunction* GetConstructor(BindingLanguage bindingLanguage = BINDINGLANGUAGE_ANY );
+
+    const PODVector<JSBClass*>& GetInterfaces() const { return interfaces_; }
 
     void SetAbstract(bool value = true) { isAbstract_ = value; }
     void SetObject(bool value = true) { isObject_ = value; }
+    void SetGeneric(bool value = true) { isGeneric_ = value; }
     void SetHeader(JSBHeader* header) { header_ = header; }
+    void SetDocString(const String& value) { docString_ = value; }
     void SetBaseClass(JSBClass* baseClass);
 
     void SetSkipFunction(const String& name, bool skip = true);
@@ -167,6 +180,8 @@ public:
     void AddFunctionOverride(JSBFunctionSignature* override) { overrides_.Push(override); }
     void AddFunctionExclude(JSBFunctionSignature* exclude) { excludes_.Push(exclude); }
     void AddPropertyFunction(JSBFunction* function);
+
+    void AddInterface(JSBClass* klass) { interfaces_.Push(klass); }
 
     void AddTypeScriptDecl(const String& decl) { typeScriptDecls_.Push(decl); }
     unsigned GetNumTypeScriptDecl() { return typeScriptDecls_.Size(); }
@@ -184,6 +199,7 @@ public:
 
 private:
 
+    void MergeInterface(JSBClass* interface);
     void RecursiveAddBaseClass(PODVector<JSBClass *> &baseClasses);
 
     String name_;
@@ -194,6 +210,7 @@ private:
 
     PODVector<JSBFunction*> functions_;
     PODVector<JSBClass*> baseClasses_;
+    PODVector<JSBClass*> interfaces_;
 
     PODVector<JSBFunctionSignature*> overrides_;
     PODVector<JSBFunctionSignature*> excludes_;
@@ -203,6 +220,10 @@ private:
 
     bool isAbstract_;
     bool isObject_;
+    bool isGeneric_;
+    bool isInterface_;
+
+    String docString_;
 
     // Vector3, Color, etc are marshalled via arrays
     int numberArrayElements_;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,13 @@
 
 #pragma once
 
+// ATOMIC BEGIN
+
+#include <Atomic/Core/Context.h>
+#include <Atomic/Core/Variant.h>
+
+// ATOMIC END
+
 namespace Atomic
 {
 
@@ -39,7 +46,7 @@ enum JSONValueType
     /// JSON array type.
     JSON_ARRAY,
     /// JSON object type.
-    JSON_OBJECT,
+    JSON_OBJECT
 };
 
 /// JSON number type.
@@ -52,7 +59,7 @@ enum JSONNumberType
     /// Unsigned integer.
     JSONNT_UINT,
     /// Float or double.
-    JSONNT_FLOAT_DOUBLE,
+    JSONNT_FLOAT_DOUBLE
 };
 
 class JSONValue;
@@ -71,7 +78,7 @@ class ATOMIC_API JSONValue
 {
 public:
     /// Construct null value.
-    JSONValue() :
+    JSONValue() : 
         type_(0)
     {
     }
@@ -128,7 +135,7 @@ public:
         type_(0)
     {
         *this = value;
-    }
+    }    
     /// Copy-construct from another JSON value.
     JSONValue(const JSONValue& value) :
         type_(0)
@@ -166,6 +173,11 @@ public:
     JSONValueType GetValueType() const;
     /// Return number type.
     JSONNumberType GetNumberType() const;
+    /// Return value type's name.
+    String GetValueTypeName() const;
+    /// Return number type's name.
+    String GetNumberTypeName() const;
+
     /// Check is null.
     bool IsNull() const { return GetValueType() == JSON_NULL; }
     /// Check is boolean.
@@ -213,7 +225,7 @@ public:
     void Erase(unsigned pos, unsigned length = 1);
     /// Resize array.
     void Resize(unsigned newSize);
-    /// Return size of array.
+    /// Return size of array or number of keys in object.
     unsigned Size() const;
 
     // JSON object functions
@@ -241,16 +253,25 @@ public:
     /// Clear array or object.
     void Clear();
 
-    /// Internal functions.
+    /// Set value type and number type, internal function.
     void SetType(JSONValueType valueType, JSONNumberType numberType = JSONNT_NAN);
+
+    /// Set variant, context must provide for resource ref.
     void SetVariant(const Variant& variant, Context* context = 0);
-    void GetVariant(Variant& variant) const;
+    /// Return a variant.
+    Variant GetVariant() const;
+    /// Set variant value, context must provide for resource ref.
     void SetVariantValue(const Variant& variant, Context* context = 0);
-    void GetVariantValue(Variant& variant, VariantType type) const;
+    /// Return a variant with type.
+    Variant GetVariantValue(VariantType type) const;
+    /// Set variant map, context must provide for resource ref.
     void SetVariantMap(const VariantMap& variantMap, Context* context = 0);
-    void GetVariantMap(VariantMap& variantMap) const;
+    /// Return a variant map.
+    VariantMap GetVariantMap() const;
+    /// Set variant vector, context must provide for resource ref.
     void SetVariantVector(const VariantVector& variantVector, Context* context = 0);
-    void GetVariantVector(VariantVector& variantVector) const;
+    /// Return a variant vector.
+    VariantVector GetVariantVector() const;
 
     /// Empty JSON value.
     static const JSONValue EMPTY;
@@ -258,6 +279,19 @@ public:
     static const JSONArray emptyArray;
     /// Empty JSON object.
     static const JSONObject emptyObject;
+
+    /// Return name corresponding to a value type.
+    static String GetValueTypeName(JSONValueType type);
+    /// Return name corresponding to a number type.
+    static String GetNumberTypeName(JSONNumberType type);
+    /// Return a value type from name; null if unrecognized.
+    static JSONValueType GetValueTypeFromName(const String& typeName);
+    /// Return a value type from name; null if unrecognized.
+    static JSONValueType GetValueTypeFromName(const char* typeName);
+    /// Return a number type from name; NaN if unrecognized.
+    static JSONNumberType GetNumberTypeFromName(const String& typeName);
+    /// Return a value type from name; NaN if unrecognized.
+    static JSONNumberType GetNumberTypeFromName(const char* typeName);
 
 private:
     /// type.

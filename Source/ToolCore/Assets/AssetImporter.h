@@ -38,7 +38,7 @@ class AssetImporter : public Object
 {
     friend class Asset;
 
-    OBJECT(AssetImporter);
+    ATOMIC_OBJECT(AssetImporter, Object);
 
 public:
     /// Construct.
@@ -67,6 +67,9 @@ public:
     virtual bool Move(const String& newPath);
 
 protected:
+
+    // Get a mapping of the assets path to cache file representations, by type
+    virtual void GetAssetCacheMap(HashMap<String, String>& assetMap) {}
 
     virtual bool Import() { return true; }
 

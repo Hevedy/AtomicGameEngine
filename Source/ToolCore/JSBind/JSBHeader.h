@@ -44,7 +44,7 @@ class JSBModule;
 class JSBHeader : public Object
 {
 
-    OBJECT(JSBHeader)
+    ATOMIC_OBJECT(JSBHeader, Object)
 
 public:
 
@@ -58,6 +58,8 @@ public:
 
     void VisitPreprocess();
     void VisitHeader();
+
+    const char* GetSource() const { return (const char*)data_.Get(); }
 
 private:
 

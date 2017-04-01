@@ -30,18 +30,18 @@ namespace Atomic
 {
 
 enum UI_EDIT_TYPE {
-    UI_EDIT_TYPE_TEXT = tb::EDIT_TYPE_TEXT,
-    UI_EDIT_TYPE_SEARCH = tb::EDIT_TYPE_SEARCH,
-    UI_EDIT_TYPE_PASSWORD = tb::EDIT_TYPE_PASSWORD,
-    UI_EDIT_TYPE_EMAIL = tb::EDIT_TYPE_EMAIL,
-    UI_EDIT_TYPE_PHONE = tb::EDIT_TYPE_PHONE,
-    UI_EDIT_TYPE_URL = tb::EDIT_TYPE_URL,
-    UI_EDIT_TYPE_NUMBER = tb::EDIT_TYPE_NUMBER
+    UI_EDIT_TYPE_TEXT = 0, // tb::EDIT_TYPE_TEXT,
+    UI_EDIT_TYPE_SEARCH = 1, // tb::EDIT_TYPE_SEARCH,
+    UI_EDIT_TYPE_PASSWORD = 2, // tb::EDIT_TYPE_PASSWORD,
+    UI_EDIT_TYPE_EMAIL = 3, // tb::EDIT_TYPE_EMAIL,
+    UI_EDIT_TYPE_PHONE = 4, // tb::EDIT_TYPE_PHONE,
+    UI_EDIT_TYPE_URL = 5, // tb::EDIT_TYPE_URL,
+    UI_EDIT_TYPE_NUMBER = 6 // tb::EDIT_TYPE_NUMBER
 };
 
 class UIEditField : public UIWidget
 {
-    OBJECT(UIEditField)
+    ATOMIC_OBJECT(UIEditField, UIWidget)
 
 public:
 
@@ -72,8 +72,11 @@ protected:
 
     virtual bool OnEvent(const tb::TBWidgetEvent &ev);
 
-private:
+    virtual void OnFocusChanged(bool focused);
 
+private:
+    // Used to keep track of if we have just been focused for the click select
+    bool firstFocusFlag_;
 };
 
 }

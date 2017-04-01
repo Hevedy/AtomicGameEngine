@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -64,9 +64,13 @@ public:
     void Define(const Vector3& near, const Vector3& far, const Matrix3x4& transform = Matrix3x4::IDENTITY);
     /// Define with a bounding box and a transform matrix.
     void Define(const BoundingBox& box, const Matrix3x4& transform = Matrix3x4::IDENTITY);
+    /// Define from a projection or view-projection matrix.
+    void Define(const Matrix4& projection);
     /// Define with orthographic projection parameters and a transform matrix.
     void DefineOrtho
         (float orthoSize, float aspectRatio, float zoom, float nearZ, float farZ, const Matrix3x4& transform = Matrix3x4::IDENTITY);
+    /// Define a split (limited) frustum from a projection matrix, with near & far distances specified.
+    void DefineSplit(const Matrix4& projection, float near, float far);
     /// Transform by a 3x3 matrix.
     void Transform(const Matrix3& transform);
     /// Transform by a 3x4 matrix.
@@ -177,6 +181,34 @@ public:
     Plane planes_[NUM_FRUSTUM_PLANES];
     /// Frustum vertices.
     Vector3 vertices_[NUM_FRUSTUM_VERTICES];
+
+    // ATOMIC BEGIN
+    /// Construct from a float array for bindings
+    explicit Frustum(const float* data)
+    {
+        // unpack planes
+        for (unsigned i = 0; i < NUM_FRUSTUM_PLANES; ++i)
+        {
+            planes_[i].normal_ = Vector3(data);
+            data += 3;
+            planes_[i].absNormal_ = Vector3(data);
+            data += 3;
+            planes_[i].d_ = *data;
+            data++;
+        }
+
+        // unpack vertices
+        for (unsigned i = 0; i < NUM_FRUSTUM_VERTICES; ++i)
+        {
+            vertices_[i] = Vector3(data);
+            data += 3;
+        }
+
+    }
+
+    /// Return float data for bindings
+    const float* Data() const { return (float*) &planes_; }
+    // ATOMIC END
 };
 
 }

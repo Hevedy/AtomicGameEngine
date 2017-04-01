@@ -28,6 +28,7 @@ export default class TurboBadgerLanguageExtension implements Editor.ClientExtens
     description: string = "TurboBadger language services for the editor.";
 
     private serviceLocator: Editor.ClientExtensions.ClientServiceLocator;
+    private active = false;
 
     /**
     * Initialize the language service
@@ -50,19 +51,43 @@ export default class TurboBadgerLanguageExtension implements Editor.ClientExtens
 
     /**
      * Called when the editor needs to be configured for a particular file
-     * @param  {Editor.EditorEvents.EditorFileEvent} ev
+     * @param  {Editor.ClientExtensions.EditorFileEvent} ev
      */
-    configureEditor(ev: Editor.EditorEvents.EditorFileEvent) {
+    configureEditor(ev: Editor.ClientExtensions.EditorFileEvent) {
         if (this.isValidFiletype(ev.filename)) {
-            let editor = <AceAjax.Editor>ev.editor;
-            editor.session.setMode("ace/mode/properties");
+            this.active = true;
+            monaco.languages.register({ id: "turbobadger" });
+            // TODO: set up syntax hilighter
+            // monaco.languages.setMonarchTokensProvider("turbobadger", this.getTokensProvider());
 
-            editor.setOptions({
-                enableBasicAutocompletion: true,
-                enableLiveAutocompletion: true,
-                useSoftTabs: false,
-                showInvisibles: true
+            let editor = <monaco.editor.IStandaloneCodeEditor>ev.editor;
+            monaco.editor.setModelLanguage(editor.getModel(), "turbobadger");
+            editor.updateOptions({
+                renderWhitespace: "all",
+                useTabStops: true,
             });
+        }
+    }
+
+    /**
+     * Called when code is first loaded into the editor
+     * @param  {CodeLoadedEvent} ev
+     */
+    codeLoaded(ev: Editor.ClientExtensions.CodeLoadedEvent) {
+        if (this.isValidFiletype(ev.filename)) {
+            let editor = <monaco.editor.IStandaloneCodeEditor>ev.editor;
+            editor.getModel().updateOptions({
+                insertSpaces: false
+            });
+        }
+    }
+
+    /**
+     * Format the code
+     */
+    formatCode() {
+        if (this.active) {
+            alert("Code formatted not available for this syntax.");
         }
     }
 }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,14 +29,20 @@
 namespace Atomic
 {
 
-RefCountedDeletedFunction RefCounted::refCountedDeletedFunction_ = 0;
-
 RefCounted::RefCounted() :
     refCount_(new RefCount()),
+// ATOMIC BEGIN
+    instantiationType_(INSTANTIATION_NATIVE),
     jsHeapPtr_(0)
+// ATOMIC END
 {
     // Hold a weak ref to self to avoid possible double delete of the refcount
     (refCount_->weakRefs_)++;
+
+// ATOMIC BEGIN
+    for (unsigned i = 0; i < refCountedCreatedFunctions_.Size(); i++)
+        refCountedCreatedFunctions_[i](this);
+// ATOMIC END
 }
 
 RefCounted::~RefCounted()
@@ -45,9 +51,6 @@ RefCounted::~RefCounted()
     assert(refCount_->refs_ == 0);
     assert(refCount_->weakRefs_ > 0);
 
-    if (refCountedDeletedFunction_)
-        refCountedDeletedFunction_(this);
-
     // Mark object as expired, release the self weak ref and delete the refcount if no other weak refs exist
     refCount_->refs_ = -1;
     (refCount_->weakRefs_)--;
@@ -55,22 +58,54 @@ RefCounted::~RefCounted()
         delete refCount_;
 
     refCount_ = 0;
+
+// ATOMIC BEGIN
+    for (unsigned i = 0; i < refCountedDeletedFunctions_.Size(); i++)
+        refCountedDeletedFunctions_[i](this);
+// ATOMIC END
 }
 
 void RefCounted::AddRef()
 {
     assert(refCount_->refs_ >= 0);
     (refCount_->refs_)++;
+
+// ATOMIC BEGIN
+    if (jsHeapPtr_ && refCount_->refs_ == 2)
+    {
+        for (unsigned i = 0; i < refCountChangedFunctions_.Size(); i++)
+        {
+            refCountChangedFunctions_[i](this, 2);
+        }
+    }
+// ATOMIC END
 }
 
 void RefCounted::ReleaseRef()
 {
     assert(refCount_->refs_ > 0);
     (refCount_->refs_)--;
-    if (!refCount_->refs_)
+
+// ATOMIC BEGIN
+    if (jsHeapPtr_ && refCount_->refs_ == 1)
     {
-        delete this;
+        for (unsigned i = 0; i < refCountChangedFunctions_.Size(); i++)
+        {
+            (refCount_->refs_)++;
+            refCountChangedFunctions_[i](this, 1);
+            if (refCount_->refs_ == 1)
+            {
+                refCount_->refs_ = 0;
+                delete this;
+                return;
+            }
+            (refCount_->refs_)--;
+        }
     }
+// ATOMIC END
+
+    if (!refCount_->refs_)
+        delete this;
 }
 
 int RefCounted::Refs() const
@@ -83,5 +118,55 @@ int RefCounted::WeakRefs() const
     // Subtract one to not return the internally held reference
     return refCount_->weakRefs_ - 1;
 }
+
+// ATOMIC BEGIN
+
+PODVector<RefCountChangedFunction> RefCounted::refCountChangedFunctions_;
+PODVector<RefCountedCreatedFunction> RefCounted::refCountedCreatedFunctions_;
+PODVector<RefCountedDeletedFunction> RefCounted::refCountedDeletedFunctions_;
+
+void RefCounted::AddRefSilent()
+{
+    assert(refCount_->refs_ >= 0);
+    (refCount_->refs_)++;
+}
+
+void RefCounted::ReleaseRefSilent()
+{
+    assert(refCount_->refs_ > 0);
+    (refCount_->refs_)--;
+}
+
+void RefCounted::AddRefCountChangedFunction(RefCountChangedFunction function)
+{
+    refCountChangedFunctions_.Push(function);
+}
+
+void RefCounted::RemoveRefCountChangedFunction(RefCountChangedFunction function)
+{
+    refCountChangedFunctions_.Remove(function);
+}
+
+void RefCounted::AddRefCountedCreatedFunction(RefCountedCreatedFunction function)
+{
+    refCountedCreatedFunctions_.Push(function);
+}
+
+void RefCounted::RemoveRefCountedCreatedFunction(RefCountedCreatedFunction function)
+{
+    refCountedCreatedFunctions_.Remove(function);
+}
+
+void RefCounted::AddRefCountedDeletedFunction(RefCountedDeletedFunction function)
+{
+    refCountedDeletedFunctions_.Push(function);
+}
+
+void RefCounted::RemoveRefCountedDeletedFunction(RefCountedDeletedFunction function)
+{
+    refCountedDeletedFunctions_.Remove(function);
+}
+
+// ATOMIC END
 
 }
